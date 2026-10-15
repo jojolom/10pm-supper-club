@@ -1,0 +1,96 @@
+// CloudKit schema for 10PM Supper Club's records (container iCloud.com.joelombardi.tenpmsupperclub).
+// Load it into Development, then deploy Development to Production in the CloudKit Console:
+//   xcrun cktool save-token --type management      (once; paste a management token from the CloudKit Console)
+//   xcrun cktool import-schema --team-id V2RWATZXA2 --container-id iCloud.com.joelombardi.tenpmsupperclub \
+//       --environment development --file scripts/schema.ckdb
+// Keep it in step with CloudKitBackend's fields.
+
+DEFINE SCHEMA
+
+    RECORD TYPE Member (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "name"          STRING,
+        "joined"        TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Dinner (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "name"          STRING,
+        "address"       STRING,
+        "neighborhood"  STRING,
+        "cuisine"       STRING,
+        "date"          TIMESTAMP,
+        "latitude"      DOUBLE,
+        "longitude"     DOUBLE,
+        "attendeeIDs"   LIST<STRING>,
+        "addedBy"       STRING,
+        "photoIDs"      LIST<STRING>,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Ranking (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "memberID"      STRING,
+        "volumeID"      STRING,
+        "order"         LIST<STRING>,
+        "updated"       TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Review (
+        "___createTime"     TIMESTAMP,
+        "___createdBy"      REFERENCE,
+        "___etag"           STRING,
+        "___modTime"        TIMESTAMP,
+        "___modifiedBy"     REFERENCE,
+        "___recordID"       REFERENCE QUERYABLE,
+        "memberID"          STRING,
+        "dinnerID"          STRING,
+        "note"              STRING,
+        "bestDish"          STRING,
+        "score_food"        DOUBLE,
+        "score_drinks"      DOUBLE,
+        "score_service"     DOUBLE,
+        "score_cigability"  DOUBLE,
+        "score_vibe"        DOUBLE,
+        "updated"           TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Photo (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "dinnerID"      STRING,
+        "image"         ASSET,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );

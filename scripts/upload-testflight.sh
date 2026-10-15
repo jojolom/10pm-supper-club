@@ -19,10 +19,14 @@ AUTH=(-allowProvisioningUpdates
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 OUT="build/release-$BUILD_NUMBER"
 
+# Signed manually with the App Store profile (Xcode's own login isn't visible to command-line
+# builds here, and the API key can't make development profiles).
 xcodebuild archive \
   -project SupperClub.xcodeproj -scheme SupperClub -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$OUT/SupperClub.xcarchive" \
-  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" "${AUTH[@]}"
+  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+  CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
+  PROVISIONING_PROFILE_SPECIFIER="10PM Supper Club App Store"
 
 xcodebuild -exportArchive \
   -archivePath "$OUT/SupperClub.xcarchive" -exportPath "$OUT/export" \
