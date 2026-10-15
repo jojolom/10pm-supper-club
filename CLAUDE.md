@@ -30,4 +30,4 @@ App icon: `scripts/make-icon.swift` (header has the command).
 - The bundle ID is registered (with iCloud) but the iCloud container must be created by a signed-in Xcode or the developer website: the API can't. The CloudKit schema is `scripts/schema.ckdb`. Load it into Development with `xcrun cktool save-token --type management` (once; Joe pastes a management token from the CloudKit Console) then `xcrun cktool import-schema --team-id V2RWATZXA2 --container-id iCloud.com.joelombardi.tenpmsupperclub --environment development --file scripts/schema.ckdb`, then deploy Development to Production in the CloudKit Console, before testers use a build. Keep it in step with `CloudKitBackend`.
 
 ## Conventions
-- Small, focused diffs; build after changes. Uploading, submitting and releasing are outward-facing: confirm with Joe first.
+- Small, focused diffs; build after changes. Remote: private repo github.com/jojolom/10pm-supper-club (`main`). Uploading, submitting and releasing are outward-facing: confirm with Joe first.
