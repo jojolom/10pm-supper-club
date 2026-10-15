@@ -71,7 +71,7 @@ struct Wordmark: View {
     }
 }
 
-/// "— VOLUME II —".
+/// "— VOLUME II · 2026 —".
 struct VolumeLabel: View {
     let volume: Volume?
     var size: CGFloat = 11
@@ -79,7 +79,7 @@ struct VolumeLabel: View {
     var body: some View {
         HStack(spacing: 10) {
             Rectangle().fill(Club.faint).frame(width: 18, height: 1)
-            SpacedCaps(text: volume.map { "Volume \(Volume.roman($0.number))" } ?? "Volume I", size: size, color: Club.muted)
+            SpacedCaps(text: volume.map { "Volume \(Volume.roman($0.number)) · \(String($0.year))" } ?? "Volume I", size: size, color: Club.muted)
             Rectangle().fill(Club.faint).frame(width: 18, height: 1)
         }
     }

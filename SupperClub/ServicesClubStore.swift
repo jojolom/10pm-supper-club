@@ -15,7 +15,6 @@ import UIKit
 /// Everything in the club, as loaded.
 struct ClubSnapshot {
     var members: [Member] = []
-    var volumes: [Volume] = []
     var dinners: [Dinner] = []
     var rankings: [Ranking] = []
     var reviews: [Review] = []
@@ -30,7 +29,6 @@ protocol ClubBackend: AnyObject {
     func createClub() async throws
     func load() async throws -> ClubSnapshot
     func save(_ member: Member) async throws
-    func save(_ volume: Volume) async throws
     func save(_ dinner: Dinner) async throws
     func delete(_ dinner: Dinner) async throws
     func save(_ ranking: Ranking) async throws
@@ -58,7 +56,7 @@ final class ClubStore {
     private(set) var phase: Phase = .loading
     private(set) var snapshot = ClubSnapshot()
     private(set) var meID: String = ""
-    /// The Volume on screen (the newest, unless another's picked).
+    /// The Volume on screen (this year's, unless another's picked).
     var volumeID: String?
     private(set) var isRefreshing = false
     private(set) var lastError: String?
@@ -72,11 +70,14 @@ final class ClubStore {
 
     var members: [Member] { snapshot.members.sorted { $0.joined < $1.joined } }
     var me: Member? { snapshot.members.first { $0.id == meID } }
-    var volumes: [Volume] { snapshot.volumes.sorted { $0.number < $1.number } }
-    var volume: Volume? { volumes.first { $0.id == volumeID } ?? volumes.last }
+    /// From Volume I (2025) through this year's, or a later year's if a dinner's dated then.
+    var volumes: [Volume] { Volume.all(through: max(.now, snapshot.dinners.map(\.date).max() ?? .now)) }
+    var volume: Volume? {
+        volumes.first { $0.id == volumeID } ?? volumes.first { $0.id == Volume.of(.now).id } ?? volumes.last
+    }
     var dinners: [Dinner] {
         guard let volume else { return [] }
-        return snapshot.dinners.filter { $0.volumeID == volume.id }.sorted { $0.date > $1.date }
+        return snapshot.dinners.filter { $0.volume == volume }.sorted { $0.date > $1.date }
     }
     var standings: [Standings.Row] {
         guard let volume else { return [] }
@@ -128,11 +129,6 @@ final class ClubStore {
         do {
             snapshot = try await backend.load()
             lastError = nil
-            if snapshot.volumes.isEmpty {
-                let first = Volume(number: 1)
-                snapshot.volumes = [first]
-                try? await backend.save(first)
-            }
             phase = me == nil ? .needsProfile : .ready
         } catch {
             lastError = error.localizedDescription
@@ -162,17 +158,10 @@ final class ClubStore {
         persist { try await $0.save(member) }
     }
 
-    @discardableResult
-    func startVolume() -> Volume {
-        let volume = Volume(number: (volumes.last?.number ?? 0) + 1)
-        snapshot.volumes.append(volume)
-        volumeID = volume.id
-        persist { try await $0.save(volume) }
-        return volume
-    }
-
+    /// Saves a dinner, and shows its Volume (its year).
     func save(_ dinner: Dinner) {
         upsert(dinner, in: \.dinners)
+        volumeID = dinner.volume.id
         persist { try await $0.save(dinner) }
     }
 

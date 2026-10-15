@@ -431,6 +431,8 @@ struct AddDinnerView: View {
     @State private var note = ""
     @State private var isSaving = false
 
+    private static let firstDay = Calendar.current.date(from: DateComponents(year: Volume.firstYear, month: 1, day: 1)) ?? .distantPast
+
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && !attendees.isEmpty && !isSaving }
 
     var body: some View {
@@ -458,7 +460,9 @@ struct AddDinnerView: View {
                     TextField("Restaurant", text: $name).font(Club.serif(18))
                     TextField("Neighborhood", text: $neighborhood)
                     TextField("Cuisine", text: $cuisine)
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    // The date decides the Volume: Volume I is 2025.
+                    DatePicker("Date", selection: $date, in: Self.firstDay..., displayedComponents: .date)
+                    SpacedCaps(text: "\(Volume.of(date).title) · \(String(Volume.of(date).year))", size: 10)
                     if !address.isEmpty {
                         Text(address).font(.footnote).foregroundStyle(Club.muted)
                     }
@@ -548,9 +552,8 @@ struct AddDinnerView: View {
     }
 
     private func save() async {
-        guard let volume = store.volume else { return }
         isSaving = true
-        var dinner = Dinner(volumeID: volume.id, name: name.trimmingCharacters(in: .whitespaces), address: address,
+        var dinner = Dinner(name: name.trimmingCharacters(in: .whitespaces), address: address,
                             neighborhood: neighborhood, cuisine: cuisine, date: date,
                             latitude: coordinate?.latitude, longitude: coordinate?.longitude,
                             attendeeIDs: store.members.map(\.id).filter(attendees.contains), addedBy: store.meID)

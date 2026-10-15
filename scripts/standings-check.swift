@@ -4,7 +4,8 @@
 //  Offline check for the ranking math (ModelsClub.swift): a member's list keeps their order and
 //  puts dinners they haven't placed after it, newest first; only attendees rank a dinner; the
 //  club order goes by average position, ties to more first places, then the newer dinner, with
-//  unranked dinners last; and "waiting on" names the attendees who haven't placed it.
+//  unranked dinners last; "waiting on" names the attendees who haven't placed it; and Volumes
+//  are years (Volume I is 2025).
 //
 //  Run from the repo root:
 //    swiftc -parse-as-library -o /tmp/standings-check SupperClub/ModelsClub.swift scripts/standings-check.swift && /tmp/standings-check
@@ -23,7 +24,7 @@ struct StandingsCheck {
         let now = Date()
         let all = ["a", "b", "c"]
         func dinner(_ id: String, _ daysAgo: Double, _ attendees: [String] = all) -> Dinner {
-            Dinner(id: id, volumeID: "v", name: id, date: now - daysAgo * 86_400, attendeeIDs: attendees)
+            Dinner(id: id, name: id, date: now - daysAgo * 86_400, attendeeIDs: attendees)
         }
         let dinners = [dinner("x", 30), dinner("y", 20), dinner("z", 10), dinner("w", 5, ["a", "b"]), dinner("new", 1)]
         let rankings = [
@@ -56,6 +57,12 @@ struct StandingsCheck {
         ])
         check(tied.map(\.dinner.id) == ["q", "p"], "a dead heat goes to the newer dinner: \(tied.map(\.dinner.id))")
         check(Volume.roman(4) == "IV" && Volume.roman(14) == "XIV", "roman numerals")
+        // Volumes are years: Volume I is 2025.
+        func day(_ y: Int, _ m: Int, _ d: Int) -> Date { Calendar.current.date(from: DateComponents(year: y, month: m, day: d))! }
+        check(Volume.of(day(2025, 3, 1)).number == 1 && Volume.of(day(2026, 12, 31)).number == 2
+              && Volume.of(day(2027, 1, 1)).title == "Volume III", "Volume I is 2025, II 2026, III 2027")
+        check(Volume.of(day(2024, 6, 1)).year == 2025, "nothing before Volume I")
+        check(Volume.all(through: day(2027, 5, 1)).map(\.year) == [2025, 2026, 2027], "every Volume through a date")
         check(Member(id: "1", name: "Joe Lombardi").initials == "JL", "initials")
 
         print(failures == 0 ? "All standings checks passed." : "\(failures) failure(s).")

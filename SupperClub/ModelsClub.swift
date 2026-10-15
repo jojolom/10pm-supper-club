@@ -2,7 +2,7 @@
 //  ModelsClub.swift
 //  10PM Supper Club
 //
-//  The club's data: its members, its Volumes (runs of dinners, like seasons), the dinners, each
+//  The club's data: its members, its Volumes (one per year: Volume I is 2025), the dinners, each
 //  member's ranking of a Volume's dinners (an order, no scores), and each member's note and
 //  best dish for a dinner. Plus Standings: the club's combined order (by average position)
 //  and each member's own list. No UI or CloudKit here, so scripts/standings-check.swift can
@@ -27,15 +27,33 @@ struct Member: Identifiable, Hashable, Codable {
     var firstName: String { name.split(separator: " ").first.map(String.init) ?? name }
 }
 
-struct Volume: Identifiable, Hashable, Codable {
-    var id: String = UUID().uuidString
-    var number: Int
-    var started: Date = .now
+/// A year of dinners: Volume I is 2025, Volume II 2026, and so on. A dinner's Volume is the
+/// year it was on, so there's nothing to start or end.
+struct Volume: Identifiable, Hashable {
+    let year: Int
 
-    /// "Volume 2".
-    var title: String { "Volume \(number)" }
+    static let firstYear = 2025
+
+    init(year: Int) {
+        self.year = max(year, Self.firstYear)
+    }
+
+    /// The Volume a dinner on `date` belongs to.
+    static func of(_ date: Date, calendar: Calendar = .current) -> Volume {
+        Volume(year: calendar.component(.year, from: date))
+    }
+
+    var number: Int { year - Self.firstYear + 1 }
+    var id: String { "vol-\(year)" }
+    /// "Volume II".
+    var title: String { "Volume \(Self.roman(number))" }
     /// "Vol. II".
     var shortTitle: String { "Vol. \(Self.roman(number))" }
+
+    /// Every Volume from the first through the one `date` is in.
+    static func all(through date: Date = .now) -> [Volume] {
+        (firstYear...max(of(date).year, firstYear)).map { Volume(year: $0) }
+    }
 
     static func roman(_ number: Int) -> String {
         let table: [(Int, String)] = [(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"),
@@ -50,7 +68,6 @@ struct Volume: Identifiable, Hashable, Codable {
 
 struct Dinner: Identifiable, Hashable, Codable {
     var id: String = UUID().uuidString
-    var volumeID: String
     var name: String
     var address: String = ""
     var neighborhood: String = ""
@@ -65,6 +82,9 @@ struct Dinner: Identifiable, Hashable, Codable {
     var photoIDs: [String] = []
 
     var hasLocation: Bool { latitude != nil && longitude != nil }
+
+    /// The year it was in.
+    var volume: Volume { Volume.of(date) }
 
     /// "West Village · Italian".
     var subtitle: String {

@@ -172,7 +172,7 @@ struct ClubTabs: View {
     }
 }
 
-/// The top of each tab: the Volume on screen, tap to switch or start a new one.
+/// The top of each tab: the Volume on screen (a year), tap to switch.
 struct VolumeSwitcher: View {
     @Environment(ClubStore.self) private var store
 
@@ -181,14 +181,8 @@ struct VolumeSwitcher: View {
         Menu {
             Picker("Volume", selection: Binding(get: { store.volume?.id }, set: { store.volumeID = $0 })) {
                 ForEach(store.volumes.reversed()) { volume in
-                    Text(volume.title).tag(Optional(volume.id))
+                    Text("\(volume.title) · \(String(volume.year))").tag(Optional(volume.id))
                 }
-            }
-            Divider()
-            Button {
-                store.startVolume()
-            } label: {
-                Label("Start Volume \(Volume.roman((store.volumes.last?.number ?? 0) + 1))", systemImage: "plus")
             }
         } label: {
             HStack(spacing: 6) {
@@ -201,7 +195,7 @@ struct VolumeSwitcher: View {
             .padding(.vertical, 8)
             .background(Club.raised, in: Capsule())
         }
-        .accessibilityLabel("Volume, \(store.volume?.title ?? "")")
+        .accessibilityLabel("Volume, \(store.volume.map { "\($0.title), \(String($0.year))" } ?? "")")
     }
 }
 

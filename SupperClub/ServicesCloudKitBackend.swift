@@ -5,7 +5,7 @@
 //  The real club, in iCloud: one record zone ("SupperClub") in the private database of
 //  whoever started the club, shared with the others through a zone-wide CKShare they join by
 //  an invite link. The founder reads and writes it in their private database; members in
-//  their shared database. Records: Member, Volume, Dinner, Ranking, Review, and Photo (its
+//  their shared database. Records: Member, Dinner, Ranking, Review, and Photo (its
 //  image as an asset, fetched only when shown). Everything is small, so a load fetches the
 //  whole zone. Each member writes only their own Ranking and Review records, so friends'
 //  edits never collide.
@@ -98,7 +98,7 @@ final class CloudKitBackend: ClubBackend {
 
     // MARK: Loading
 
-    private static let fields = ["name", "joined", "number", "started", "volumeID", "address", "neighborhood", "cuisine",
+    private static let fields = ["name", "joined", "volumeID", "address", "neighborhood", "cuisine",
                                  "date", "latitude", "longitude", "attendeeIDs", "addedBy", "photoIDs", "memberID",
                                  "order", "updated", "dinnerID", "note", "bestDish"]
 
@@ -123,11 +123,9 @@ final class CloudKitBackend: ClubBackend {
         switch record.recordType {
         case "Member":
             snapshot.members.append(Member(id: name, name: record["name"] as? String ?? "", joined: record["joined"] as? Date ?? .distantPast))
-        case "Volume":
-            snapshot.volumes.append(Volume(id: name, number: (record["number"] as? Int) ?? 1, started: record["started"] as? Date ?? .now))
         case "Dinner":
             snapshot.dinners.append(Dinner(
-                id: name, volumeID: record["volumeID"] as? String ?? "", name: record["name"] as? String ?? "",
+                id: name, name: record["name"] as? String ?? "",
                 address: record["address"] as? String ?? "", neighborhood: record["neighborhood"] as? String ?? "",
                 cuisine: record["cuisine"] as? String ?? "", date: record["date"] as? Date ?? .now,
                 latitude: record["latitude"] as? Double, longitude: record["longitude"] as? Double,
@@ -165,13 +163,9 @@ final class CloudKitBackend: ClubBackend {
         try await write(record("Member", member.id, ["name": member.name, "joined": member.joined]))
     }
 
-    func save(_ volume: Volume) async throws {
-        try await write(record("Volume", volume.id, ["number": volume.number, "started": volume.started]))
-    }
-
     func save(_ dinner: Dinner) async throws {
         try await write(record("Dinner", dinner.id, [
-            "volumeID": dinner.volumeID, "name": dinner.name, "address": dinner.address,
+            "name": dinner.name, "address": dinner.address,
             "neighborhood": dinner.neighborhood, "cuisine": dinner.cuisine, "date": dinner.date,
             "latitude": dinner.latitude, "longitude": dinner.longitude, "attendeeIDs": dinner.attendeeIDs,
             "addedBy": dinner.addedBy, "photoIDs": dinner.photoIDs,

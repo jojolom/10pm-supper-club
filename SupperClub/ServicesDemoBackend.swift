@@ -2,7 +2,7 @@
 //  ServicesDemoBackend.swift
 //  10PM Supper Club
 //
-//  An in-memory club with four members and two Volumes of NYC dinners, for the Simulator
+//  An in-memory club with four members and NYC dinners in 2025 and 2026 (Volumes I and II), for the Simulator
 //  (where iCloud sharing can't be tried) and screenshots. Debug builds launched with
 //  `-demo YES` use it; nothing is saved.
 //
@@ -26,23 +26,26 @@ final class DemoBackend: ClubBackend {
             Member(id: "demo-theo", name: "Theo", joined: now - 397 * day),
         ]
         let ids = members.map(\.id)
-        let one = Volume(id: "vol-1", number: 1, started: now - 380 * day)
-        let two = Volume(id: "vol-2", number: 2, started: now - 90 * day)
-        func dinner(_ id: String, _ volume: Volume, _ name: String, _ hood: String, _ cuisine: String,
-                    _ daysAgo: Double, _ address: String, _ lat: Double, _ lon: Double, attendees: [String]? = nil) -> Dinner {
-            Dinner(id: id, volumeID: volume.id, name: name, address: address, neighborhood: hood, cuisine: cuisine,
-                   date: now - daysAgo * day, latitude: lat, longitude: lon, attendeeIDs: attendees ?? ids, addedBy: ids[0])
+        let one = Volume(year: 2025)
+        let two = Volume(year: 2026)
+        func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+            Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 22)) ?? now
+        }
+        func dinner(_ id: String, _ name: String, _ hood: String, _ cuisine: String, _ when: Date,
+                    _ address: String, _ lat: Double, _ lon: Double, attendees: [String]? = nil) -> Dinner {
+            Dinner(id: id, name: name, address: address, neighborhood: hood, cuisine: cuisine,
+                   date: when, latitude: lat, longitude: lon, attendeeIDs: attendees ?? ids, addedBy: ids[0])
         }
         let dinners = [
-            dinner("carbone", two, "Carbone", "Greenwich Village", "Italian", 6, "181 Thompson St", 40.7279, -74.0001),
-            dinner("coucou", two, "Le Coucou", "SoHo", "French", 20, "138 Lafayette St", 40.7191, -74.0003),
-            dinner("lilia", two, "Lilia", "Williamsburg", "Italian", 34, "567 Union Ave, Brooklyn", 40.7175, -73.9522),
-            dinner("raouls", two, "Raoul's", "SoHo", "French Bistro", 48, "180 Prince St", 40.7262, -74.0024),
-            dinner("cote", two, "Cote", "Flatiron", "Korean Steakhouse", 62, "16 W 22nd St", 40.7416, -73.9915,
+            dinner("carbone", "Carbone", "Greenwich Village", "Italian", date(2026, 10, 3), "181 Thompson St", 40.7279, -74.0001),
+            dinner("coucou", "Le Coucou", "SoHo", "French", date(2026, 8, 22), "138 Lafayette St", 40.7191, -74.0003),
+            dinner("lilia", "Lilia", "Williamsburg", "Italian", date(2026, 6, 13), "567 Union Ave, Brooklyn", 40.7175, -73.9522),
+            dinner("raouls", "Raoul's", "SoHo", "French Bistro", date(2026, 4, 18), "180 Prince St", 40.7262, -74.0024),
+            dinner("cote", "Cote", "Flatiron", "Korean Steakhouse", date(2026, 2, 7), "16 W 22nd St", 40.7416, -73.9915,
                    attendees: [ids[0], ids[1], ids[2]]),
-            dinner("viacarota", one, "Via Carota", "West Village", "Italian", 120, "51 Grove St", 40.7333, -74.0036),
-            dinner("prime", one, "4 Charles Prime Rib", "West Village", "Steakhouse", 160, "4 Charles St", 40.7355, -74.0008),
-            dinner("minetta", one, "Minetta Tavern", "Greenwich Village", "Brasserie", 210, "113 MacDougal St", 40.7300, -74.0006),
+            dinner("viacarota", "Via Carota", "West Village", "Italian", date(2025, 11, 15), "51 Grove St", 40.7333, -74.0036),
+            dinner("prime", "4 Charles Prime Rib", "West Village", "Steakhouse", date(2025, 8, 9), "4 Charles St", 40.7355, -74.0008),
+            dinner("minetta", "Minetta Tavern", "Greenwich Village", "Brasserie", date(2025, 5, 24), "113 MacDougal St", 40.7300, -74.0006),
         ]
         let rankings = [
             Ranking(memberID: ids[0], volumeID: two.id, order: ["coucou", "carbone", "cote", "lilia", "raouls"]),
@@ -60,7 +63,7 @@ final class DemoBackend: ClubBackend {
             Review(memberID: ids[2], dinnerID: "lilia", note: "Pasta perfection. Went back the next week.", bestDish: "Mafaldini, pink peppercorns"),
             Review(memberID: ids[3], dinnerID: "coucou", note: "", bestDish: "Lobster salad"),
         ]
-        snapshot = ClubSnapshot(members: members, volumes: [one, two], dinners: dinners, rankings: rankings, reviews: reviews)
+        snapshot = ClubSnapshot(members: members, dinners: dinners, rankings: rankings, reviews: reviews)
     }
 
     func currentUserID() async throws -> String { meID }
@@ -68,7 +71,6 @@ final class DemoBackend: ClubBackend {
     func load() async throws -> ClubSnapshot { snapshot }
 
     func save(_ member: Member) async throws { upsert(member, \.members) }
-    func save(_ volume: Volume) async throws { upsert(volume, \.volumes) }
     func save(_ dinner: Dinner) async throws { upsert(dinner, \.dinners) }
     func delete(_ dinner: Dinner) async throws { snapshot.dinners.removeAll { $0.id == dinner.id } }
     func save(_ ranking: Ranking) async throws {
