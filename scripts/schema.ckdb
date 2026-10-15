@@ -1,10 +1,3 @@
-// CloudKit schema for 10PM Supper Club's records (container iCloud.com.joelombardi.tenpmsupperclub).
-// Load it into Development, then deploy Development to Production in the CloudKit Console:
-//   xcrun cktool save-token --type management      (once; paste a management token from the CloudKit Console)
-//   xcrun cktool import-schema --team-id V2RWATZXA2 --container-id iCloud.com.joelombardi.tenpmsupperclub \
-//       --environment development --file scripts/schema.ckdb
-// Keep it in step with CloudKitBackend's fields.
-
 DEFINE SCHEMA
 
     RECORD TYPE Member (
