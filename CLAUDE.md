@@ -23,5 +23,10 @@ swiftc -parse-as-library -o /tmp/standings-check SupperClub/ModelsClub.swift scr
 ```
 App icon: `scripts/make-icon.swift` (header has the command).
 
+## Release
+- Upload to TestFlight with `scripts/upload-testflight.sh` (archives, signs, uploads; build number = timestamp). Same App Store Connect API key as Guitar Man, in `~/.appstoreconnect/` — never copy it into the repo or print it.
+- Export signing is manual (`scripts/ExportOptions.plist`, `iCloudContainerEnvironment` = Production): the "Apple Distribution" certificate in Joe's login keychain and an App Store profile named "10PM Supper Club App Store" (create with `python3 ~/Developer/Guitar\ Man/scripts/asc.py POST /v1/profiles ...`).
+- The bundle ID is registered (with iCloud) but the iCloud container must be created by a signed-in Xcode or the developer website: the API can't. Deploy the CloudKit schema to Production before testers use a build.
+
 ## Conventions
 - Small, focused diffs; build after changes. Uploading, submitting and releasing are outward-facing: confirm with Joe first.
