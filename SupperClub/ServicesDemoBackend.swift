@@ -58,10 +58,17 @@ final class DemoBackend: ClubBackend {
             Ranking(memberID: ids[3], volumeID: one.id, order: ["prime", "viacarota", "minetta"]),
         ]
         let reviews = [
-            Review(memberID: ids[0], dinnerID: "coucou", note: "Best room in the city. Worth every minute of the wait.", bestDish: "Quenelles de brochet"),
-            Review(memberID: ids[1], dinnerID: "carbone", note: "The show is half of it, and the other half is the rigatoni.", bestDish: "Spicy rigatoni vodka"),
-            Review(memberID: ids[2], dinnerID: "lilia", note: "Pasta perfection. Went back the next week.", bestDish: "Mafaldini, pink peppercorns"),
-            Review(memberID: ids[3], dinnerID: "coucou", note: "", bestDish: "Lobster salad"),
+            Review(memberID: ids[0], dinnerID: "coucou", note: "Best room in the city. Worth every minute of the wait.", bestDish: "Quenelles de brochet",
+                   scores: [.food: 9.5, .drinks: 8.5, .service: 10, .cigability: 4, .vibe: 9]),
+            Review(memberID: ids[1], dinnerID: "carbone", note: "The show is half of it, and the other half is the rigatoni.", bestDish: "Spicy rigatoni vodka",
+                   scores: [.food: 9, .drinks: 8, .service: 9.5, .cigability: 6.5, .vibe: 10]),
+            Review(memberID: ids[2], dinnerID: "lilia", note: "Pasta perfection. Went back the next week.", bestDish: "Mafaldini, pink peppercorns",
+                   scores: [.food: 10, .drinks: 7, .service: 8, .cigability: 8.5, .vibe: 7.5]),
+            Review(memberID: ids[3], dinnerID: "coucou", note: "", bestDish: "Lobster salad",
+                   scores: [.food: 9, .drinks: 9, .service: 9.5, .cigability: 3, .vibe: 8.5]),
+            Review(memberID: ids[1], dinnerID: "coucou", scores: [.food: 8.5, .drinks: 8, .service: 9, .cigability: 5, .vibe: 8]),
+            Review(memberID: ids[0], dinnerID: "carbone", scores: [.food: 8.5, .drinks: 7.5, .service: 9, .cigability: 7, .vibe: 9.5]),
+            Review(memberID: ids[0], dinnerID: "lilia", scores: [.food: 9, .drinks: 6.5, .service: 7.5, .cigability: 9, .vibe: 7]),
         ]
         snapshot = ClubSnapshot(members: members, dinners: dinners, rankings: rankings, reviews: reviews)
     }

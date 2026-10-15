@@ -3,8 +3,9 @@
 //  10PM Supper Club
 //
 //  The club's data: its members, its Volumes (one per year: Volume I is 2025), the dinners, each
-//  member's ranking of a Volume's dinners (an order, no scores), and each member's note and
-//  best dish for a dinner. Plus Standings: the club's combined order (by average position)
+//  member's ranking of a Volume's dinners (an order, no scores), and each member's note, best
+//  dish and category scores for a dinner (Food, Drinks, Service, Cigability, Vibe: 1–10 in
+//  half points, shown per person, never part of the club's order). Plus Standings: the club's combined order (by average position)
 //  and each member's own list. No UI or CloudKit here, so scripts/standings-check.swift can
 //  check it.
 //
@@ -103,17 +104,64 @@ struct Ranking: Hashable, Codable {
     static func id(member: String, volume: String) -> String { "rank-\(member)-\(volume)" }
 }
 
-/// One member's note and standout dish for one dinner.
+/// What each member scores a dinner on, alongside (not instead of) where they rank it.
+enum ScoreCategory: String, CaseIterable, Codable, Identifiable {
+    case food, drinks, service, cigability, vibe
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .food: return "Food"
+        case .drinks: return "Drinks"
+        case .service: return "Service"
+        case .cigability: return "Cigability"
+        case .vibe: return "Vibe"
+        }
+    }
+
+    /// For Cigability: what it means.
+    var detail: String? {
+        self == .cigability ? "Smoking a cig between courses" : nil
+    }
+
+    var symbol: String {
+        switch self {
+        case .food: return "fork.knife"
+        case .drinks: return "wineglass"
+        case .service: return "bell"
+        case .cigability: return "smoke"
+        case .vibe: return "sparkles"
+        }
+    }
+
+    static let range: ClosedRange<Double> = 1...10
+
+    /// A score as it's kept: within 1–10, to the nearest half point.
+    static func clean(_ score: Double) -> Double {
+        (min(max(score, range.lowerBound), range.upperBound) * 2).rounded() / 2
+    }
+
+    /// "8.5", "9".
+    static func format(_ score: Double) -> String {
+        score.rounded() == score ? String(Int(score)) : String(format: "%.1f", score)
+    }
+}
+
+/// One member's take on one dinner: a note, their standout dish, and category scores.
 struct Review: Hashable, Codable, Identifiable {
     var memberID: String
     var dinnerID: String
     var note: String = ""
     var bestDish: String = ""
+    /// Scores by category (only the ones they've given).
+    var scores: [ScoreCategory: Double] = [:]
     var updated: Date = .now
 
     var id: String { Self.id(member: memberID, dinner: dinnerID) }
     static func id(member: String, dinner: String) -> String { "review-\(member)-\(dinner)" }
-    var isEmpty: Bool { note.isEmpty && bestDish.isEmpty }
+    var isEmpty: Bool { note.isEmpty && bestDish.isEmpty && scores.isEmpty }
+    var hasWords: Bool { !note.isEmpty || !bestDish.isEmpty }
 }
 
 // MARK: - Standings

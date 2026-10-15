@@ -96,8 +96,9 @@ final class ClubStore {
         Standings.list(for: memberID, dinners: dinners, ranking: ranking(for: memberID))
     }
 
+    /// Reviews with a note or best dish, for the dinner's notes.
     func reviews(for dinnerID: String) -> [Review] {
-        snapshot.reviews.filter { $0.dinnerID == dinnerID && !$0.isEmpty }
+        snapshot.reviews.filter { $0.dinnerID == dinnerID && $0.hasWords }
             .sorted { (member($0.memberID)?.joined ?? .now) < (member($1.memberID)?.joined ?? .now) }
     }
 
@@ -178,10 +179,11 @@ final class ClubStore {
         persist { try await $0.save(ranking) }
     }
 
-    func saveMyReview(of dinnerID: String, note: String, bestDish: String) {
+    func saveMyReview(of dinnerID: String, note: String, bestDish: String, scores: [ScoreCategory: Double]) {
         let review = Review(memberID: meID, dinnerID: dinnerID,
                             note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-                            bestDish: bestDish.trimmingCharacters(in: .whitespacesAndNewlines))
+                            bestDish: bestDish.trimmingCharacters(in: .whitespacesAndNewlines),
+                            scores: scores.mapValues(ScoreCategory.clean))
         upsert(review, in: \.reviews)
         persist { try await $0.save(review) }
     }

@@ -3,8 +3,8 @@
 //  10PM Supper Club
 //
 //  The Volume's dinners as a gallery or on a dark map of the city; a dinner's page (cover and
-//  photos, where it ranks for the club and for each of you, everyone's note and best dish, the
-//  address); adding a dinner (find it with Apple Maps, pick the date and who was there, add a
+//  photos, where it ranks for the club and for each of you, everyone's category scores, note
+//  and best dish, the address); adding a dinner (find it with Apple Maps, pick the date and who was there, add a
 //  cover); and inviting friends (the club's iCloud share).
 //
 
@@ -150,6 +150,7 @@ struct DinnerDetailView: View {
                         }
 
                     rankings(dinner).padding(.horizontal, 16)
+                    ScoresCard(dinner: dinner) { editingReview = true }.padding(.horizontal, 16)
                     reviews(dinner).padding(.horizontal, 16)
                     photos(dinner)
                     details(dinner).padding(.horizontal, 16)
@@ -161,7 +162,7 @@ struct DinnerDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button { editingReview = true } label: { Label("My Note & Best Dish", systemImage: "square.and.pencil") }
+                        Button { editingReview = true } label: { Label("My Scores & Notes", systemImage: "square.and.pencil") }
                         Button(role: .destructive) { confirmDelete = true } label: { Label("Delete Dinner", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis") }
                 }
@@ -244,7 +245,7 @@ struct DinnerDetailView: View {
                 SpacedCaps(text: "Notes from the table", size: 10)
                 Spacer()
                 Button { editingReview = true } label: {
-                    SpacedCaps(text: store.review(by: store.meID, of: dinner.id)?.isEmpty == false ? "Edit mine" : "Add mine",
+                    SpacedCaps(text: store.review(by: store.meID, of: dinner.id)?.hasWords == true ? "Edit mine" : "Add mine",
                                size: 9.5, color: Club.cream)
                 }
             }
@@ -375,10 +376,18 @@ private struct ReviewEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var note = ""
     @State private var bestDish = ""
+    @State private var scores: [ScoreCategory: Double] = [:]
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    ScoreEditor(scores: $scores)
+                } header: {
+                    Text("Your scores")
+                } footer: {
+                    Text("Out of 10, in half points. They're yours alone: they don't change the club's ranking.")
+                }
                 Section("Best dish") {
                     TextField("The one you'd order again", text: $bestDish)
                         .font(Club.serif(18))
@@ -391,13 +400,13 @@ private struct ReviewEditor: View {
             }
             .scrollContentBackground(.hidden)
             .background(Club.black)
-            .navigationTitle(dinner.name)
+            .navigationTitle("My Take")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.saveMyReview(of: dinner.id, note: note, bestDish: bestDish)
+                        store.saveMyReview(of: dinner.id, note: note, bestDish: bestDish, scores: scores)
                         dismiss()
                     }
                 }
@@ -406,9 +415,10 @@ private struct ReviewEditor: View {
                 let mine = store.review(by: store.meID, of: dinner.id)
                 note = mine?.note ?? ""
                 bestDish = mine?.bestDish ?? ""
+                scores = mine?.scores ?? [:]
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 }
 
@@ -429,6 +439,7 @@ struct AddDinnerView: View {
     @State private var coverImage: UIImage?
     @State private var bestDish = ""
     @State private var note = ""
+    @State private var scores: [ScoreCategory: Double] = [:]
     @State private var isSaving = false
 
     private static let firstDay = Calendar.current.date(from: DateComponents(year: Volume.firstYear, month: 1, day: 1)) ?? .distantPast
@@ -500,6 +511,10 @@ struct AddDinnerView: View {
                     }
                 }
 
+                Section("Your scores (optional)") {
+                    ScoreEditor(scores: $scores)
+                }
+
                 Section("Your take (optional)") {
                     TextField("Best dish", text: $bestDish)
                     TextField("A note on the night", text: $note, axis: .vertical).lineLimit(2...5)
@@ -558,7 +573,9 @@ struct AddDinnerView: View {
                             latitude: coordinate?.latitude, longitude: coordinate?.longitude,
                             attendeeIDs: store.members.map(\.id).filter(attendees.contains), addedBy: store.meID)
         store.save(dinner)
-        if !bestDish.isEmpty || !note.isEmpty { store.saveMyReview(of: dinner.id, note: note, bestDish: bestDish) }
+        if !bestDish.isEmpty || !note.isEmpty || !scores.isEmpty {
+            store.saveMyReview(of: dinner.id, note: note, bestDish: bestDish, scores: scores)
+        }
         if let cover, let data = try? await cover.loadTransferable(type: Data.self), let jpeg = DinnerDetailView.jpeg(data) {
             await store.addPhotos([jpeg], to: dinner.id)
             dinner = store.dinner(dinner.id) ?? dinner

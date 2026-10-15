@@ -4,7 +4,8 @@
 //
 //  The rankings: the Club's (everyone's lists combined by average position, each person's spot
 //  shown under it), My List (your own order: drag a dinner up or down; new dinners wait at the
-//  bottom until you place them), and Members (anyone's list, side by side with the club's).
+//  bottom until you place them), and Members (anyone's list, side by side with the club's, with
+//  their category scores under each dinner).
 //
 
 import SwiftUI
@@ -324,11 +325,15 @@ struct MembersView: View {
                                 .font(Club.serif(19))
                                 .foregroundStyle(Club.cream)
                                 .lineLimit(1)
-                            if let best = store.review(by: memberID, of: dinner.id)?.bestDish, !best.isEmpty {
+                            let review = store.review(by: memberID, of: dinner.id)
+                            if let best = review?.bestDish, !best.isEmpty {
                                 Text("Best: \(best)")
                                     .font(Club.italic(14))
                                     .foregroundStyle(Club.muted)
                                     .lineLimit(1)
+                            }
+                            if let scores = review?.scores, !scores.isEmpty {
+                                ScoreStrip(scores: scores)
                             }
                         }
                         Spacer(minLength: 0)

@@ -5,7 +5,8 @@
 //  The real club, in iCloud: one record zone ("SupperClub") in the private database of
 //  whoever started the club, shared with the others through a zone-wide CKShare they join by
 //  an invite link. The founder reads and writes it in their private database; members in
-//  their shared database. Records: Member, Dinner, Ranking, Review, and Photo (its
+//  their shared database. Records: Member, Dinner, Ranking, Review (note, best dish, and a
+//  score_<category> field per category scored), and Photo (its
 //  image as an asset, fetched only when shown). Everything is small, so a load fetches the
 //  whole zone. Each member writes only their own Ranking and Review records, so friends'
 //  edits never collide.
@@ -101,6 +102,7 @@ final class CloudKitBackend: ClubBackend {
     private static let fields = ["name", "joined", "volumeID", "address", "neighborhood", "cuisine",
                                  "date", "latitude", "longitude", "attendeeIDs", "addedBy", "photoIDs", "memberID",
                                  "order", "updated", "dinnerID", "note", "bestDish"]
+        + ScoreCategory.allCases.map { "score_\($0.rawValue)" }
 
     func load() async throws -> ClubSnapshot {
         var snapshot = ClubSnapshot()
@@ -135,9 +137,13 @@ final class CloudKitBackend: ClubBackend {
             snapshot.rankings.append(Ranking(memberID: record["memberID"] as? String ?? "", volumeID: record["volumeID"] as? String ?? "",
                                              order: record["order"] as? [String] ?? [], updated: record["updated"] as? Date ?? .now))
         case "Review":
+            var scores: [ScoreCategory: Double] = [:]
+            for category in ScoreCategory.allCases {
+                if let score = record["score_\(category.rawValue)"] as? Double { scores[category] = ScoreCategory.clean(score) }
+            }
             snapshot.reviews.append(Review(memberID: record["memberID"] as? String ?? "", dinnerID: record["dinnerID"] as? String ?? "",
                                            note: record["note"] as? String ?? "", bestDish: record["bestDish"] as? String ?? "",
-                                           updated: record["updated"] as? Date ?? .now))
+                                           scores: scores, updated: record["updated"] as? Date ?? .now))
         default:
             break
         }
@@ -183,8 +189,11 @@ final class CloudKitBackend: ClubBackend {
     }
 
     func save(_ review: Review) async throws {
-        try await write(record("Review", review.id, ["memberID": review.memberID, "dinnerID": review.dinnerID,
-                                                     "note": review.note, "bestDish": review.bestDish, "updated": review.updated]))
+        var fields: [String: Any?] = ["memberID": review.memberID, "dinnerID": review.dinnerID,
+                                      "note": review.note, "bestDish": review.bestDish, "updated": review.updated]
+        // Every category is written, so clearing a score clears it in iCloud too.
+        for category in ScoreCategory.allCases { fields.updateValue(review.scores[category], forKey: "score_\(category.rawValue)") }
+        try await write(record("Review", review.id, fields))
     }
 
     func savePhoto(_ jpeg: Data, dinnerID: String) async throws -> String {

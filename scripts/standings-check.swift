@@ -5,7 +5,7 @@
 //  puts dinners they haven't placed after it, newest first; only attendees rank a dinner; the
 //  club order goes by average position, ties to more first places, then the newer dinner, with
 //  unranked dinners last; "waiting on" names the attendees who haven't placed it; and Volumes
-//  are years (Volume I is 2025).
+//  are years (Volume I is 2025); category scores keep to 1–10 in half points.
 //
 //  Run from the repo root:
 //    swiftc -parse-as-library -o /tmp/standings-check SupperClub/ModelsClub.swift scripts/standings-check.swift && /tmp/standings-check
@@ -64,6 +64,12 @@ struct StandingsCheck {
         check(Volume.of(day(2024, 6, 1)).year == 2025, "nothing before Volume I")
         check(Volume.all(through: day(2027, 5, 1)).map(\.year) == [2025, 2026, 2027], "every Volume through a date")
         check(Member(id: "1", name: "Joe Lombardi").initials == "JL", "initials")
+        // Scores: 1–10 in half points, shown without a needless ".0".
+        check(ScoreCategory.clean(8.3) == 8.5 && ScoreCategory.clean(8.2) == 8 && ScoreCategory.clean(12) == 10
+              && ScoreCategory.clean(0) == 1, "scores round to half points within 1–10")
+        check(ScoreCategory.format(9) == "9" && ScoreCategory.format(8.5) == "8.5", "score formatting")
+        check(Review(memberID: "a", dinnerID: "x", scores: [.vibe: 7]).isEmpty == false
+              && Review(memberID: "a", dinnerID: "x", scores: [.vibe: 7]).hasWords == false, "scores alone are a review without words")
 
         print(failures == 0 ? "All standings checks passed." : "\(failures) failure(s).")
         exit(failures == 0 ? 0 : 1)
