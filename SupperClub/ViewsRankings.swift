@@ -348,7 +348,7 @@ struct MembersView: View {
                         .foregroundStyle(Club.cream)
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Button("Not Now") { withAnimation(.snappy) { store.turnDown(person.id) } }
+                    Button("Decline") { withAnimation(.snappy) { store.turnDown(person.id) } }
                         .font(Club.serif(14, bold: false))
                         .foregroundStyle(Club.muted)
                     Button {
@@ -379,12 +379,17 @@ struct MembersView: View {
                     .font(Club.serif(24))
                     .foregroundStyle(Club.cream)
                 Spacer()
-                SpacedCaps(text: "Club", size: 9, color: Club.faint)
+                // Heads the right-hand column: where the club put each dinner.
+                if !list.ranked.isEmpty {
+                    SpacedCaps(text: "Club rank", size: 9, color: Club.faint)
+                }
             }
             .padding(.horizontal, 4)
 
             if list.ranked.isEmpty {
-                EmptyState(title: "Not ranked yet", message: "Their list fills in once they rank this Volume.")
+                EmptyState(title: "Not ranked yet",
+                           message: memberID == store.meID ? "Put this Volume's dinners in order in My List."
+                                                           : "Their list fills in once they rank this Volume.")
             }
             ForEach(Array(list.ranked.enumerated()), id: \.element.id) { index, dinner in
                 NavigationLink(value: dinner) {

@@ -225,7 +225,7 @@ struct VolumeSwitcher: View {
     }
 }
 
-/// Common chrome for a tab's page: black, a title in spaced capitals, the Volume switcher.
+/// Common chrome for a tab's page: black, the Volume switcher, pull to refresh, save errors.
 struct ClubPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -235,11 +235,13 @@ struct ClubPage<Content: View>: View {
         content
             .scrollContentBackground(.hidden)
             .background(Club.black.ignoresSafeArea())
+            // The tab bar names the page, so the bar holds only the Volume and the page's actions
+            // (a title squeezed between them sat off-center and got cut off). The title still
+            // names the back button and VoiceOver's page.
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SpacedCaps(text: title, size: 13, color: Club.cream)
-                }
                 ToolbarItem(placement: .topBarLeading) {
                     VolumeSwitcher()
                 }
