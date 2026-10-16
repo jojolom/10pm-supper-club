@@ -256,8 +256,8 @@ struct MembersView: View {
     @State private var showRename = false
     @State private var newName = ""
 
-    /// Where friends get the app (TestFlight's public link); then they tap "I'm in the Club".
-    static let inviteURL = URL(string: "https://testflight.apple.com/join/qnFPRnue")!
+    /// Where friends get the app (its App Store page); then they tap "I'm in the Club".
+    static let inviteURL = URL(string: "https://apps.apple.com/app/id6823010763")!
 
     private var memberID: String { selected ?? (store.isMember ? store.meID : store.members.first?.id ?? "") }
 
