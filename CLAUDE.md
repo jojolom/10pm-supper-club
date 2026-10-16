@@ -26,9 +26,11 @@ App icon: `scripts/make-icon.swift` (header has the command).
 
 ## Release
 - App Store Connect app id 6823010763. TestFlight groups: "Club Internal" (Joe, every build) and "Supper Club" (external, public link https://testflight.apple.com/join/qnFPRnue, up to 10).
+- `docs/index.html`: Support & Privacy Policy page, served by GitHub Pages at https://jojolom.github.io/10pm-supper-club/ (the listing's support and privacy URL; `Support` in `ServicesSupport.swift` links to it and drafts report emails to jojolom.lombardi@icloud.com). Keep it accurate when the app's data handling changes. The repo is public for this, so never commit keys or tokens.
+- App Store listing (US only, free, Food & Drink) is filled through the App Store Connect API with `~/Developer/Guitar Man/scripts/asc.py`. App Privacy answers can only be set on the website.
 - Upload to TestFlight with `scripts/upload-testflight.sh` (archives, signs, uploads; build number = timestamp). Same App Store Connect API key as Guitar Man, in `~/.appstoreconnect/` — never copy it into the repo or print it.
 - Export signing is manual (`scripts/ExportOptions.plist`, `iCloudContainerEnvironment` = Production): the "Apple Distribution" certificate in Joe's login keychain and an App Store profile named "10PM Supper Club App Store" (create with `python3 ~/Developer/Guitar\ Man/scripts/asc.py POST /v1/profiles ...`).
 - The bundle ID is registered (with iCloud) but the iCloud container must be created by a signed-in Xcode or the developer website: the API can't. The CloudKit schema is `scripts/schema.ckdb`. Load it into Development with `xcrun cktool save-token --type management` (once; Joe pastes a management token from the CloudKit Console) then `xcrun cktool import-schema --team-id V2RWATZXA2 --container-id iCloud.com.joelombardi.tenpmsupperclub --environment development --file scripts/schema.ckdb`, then deploy Development to Production in the CloudKit Console, before testers use a build. Keep it in step with `CloudKitBackend`.
 
 ## Conventions
-- Small, focused diffs; build after changes. Remote: private repo github.com/jojolom/10pm-supper-club (`main`). Uploading, submitting and releasing are outward-facing: confirm with Joe first.
+- Small, focused diffs; build after changes. Remote: public repo github.com/jojolom/10pm-supper-club (`main`). Uploading, submitting and releasing are outward-facing: confirm with Joe first.
