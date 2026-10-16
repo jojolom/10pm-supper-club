@@ -3,9 +3,9 @@
 //  10PM Supper Club
 //
 //  Category scores (Food, Drinks, Service, Cigability, Vibe; 1–10 in half points): the sliders
-//  for scoring a dinner, the table of everyone's scores on a dinner's page, and the compact
-//  line under a dinner in someone's list. Scores are each person's own; they never move the
-//  club's order.
+//  for scoring a dinner, the table of everyone's scores on a dinner's page (with the guests'
+//  average apart), and the compact line under a dinner in someone's list. Scores are each
+//  person's own; they never move the club's order.
 //
 
 import SwiftUI
@@ -55,10 +55,12 @@ struct ScoreEditor: View {
     }
 }
 
-/// Everyone's scores for a dinner: a row per category, a column per person who was there.
+/// Everyone's scores for a dinner: a row per category, a column per member who was there, and
+/// a last column for the guests' average (kept apart from the club's). A guest sees their own
+/// scores underneath, and can score it once the club has.
 struct ScoresCard: View {
     let dinner: Dinner
-    private static let labelWidth: CGFloat = 112
+    private static let labelWidth: CGFloat = 104
     let onScore: () -> Void
     @Environment(ClubStore.self) private var store
 
@@ -67,13 +69,16 @@ struct ScoresCard: View {
         let reviews = Dictionary(uniqueKeysWithValues: members.compactMap { member in
             store.review(by: member.id, of: dinner.id).map { (member.id, $0) }
         })
-        let anyScores = reviews.values.contains { !$0.scores.isEmpty }
+        let guests = store.guestReviews(for: dinner.id)
+        let guestAverages = ScoreCategory.averages(guests.map(\.scores))
+        let anyScores = reviews.values.contains { !$0.scores.isEmpty } || !guests.isEmpty
+        let mine = store.myGuestReview(of: dinner.id)?.scores ?? [:]
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 SpacedCaps(text: "Scores", size: 10)
                 Spacer()
-                Button(action: onScore) {
-                    SpacedCaps(text: reviews[store.meID]?.scores.isEmpty == false ? "Edit mine" : "Score it", size: 9.5, color: Club.cream)
+                if let label = buttonLabel(memberScored: reviews[store.meID]?.scores.isEmpty == false, guestScored: !mine.isEmpty) {
+                    Button(action: onScore) { SpacedCaps(text: label, size: 9.5, color: Club.cream) }
                 }
             }
             if anyScores {
@@ -83,6 +88,9 @@ struct ScoresCard: View {
                         ForEach(members) { member in
                             MemberBadge(member: member, size: 26, isMe: member.id == store.meID)
                                 .frame(maxWidth: .infinity)
+                        }
+                        if !guests.isEmpty {
+                            GuestsBadge(count: guests.count, size: 26).frame(maxWidth: .infinity)
                         }
                     }
                     ForEach(ScoreCategory.allCases) { category in
@@ -107,6 +115,15 @@ struct ScoresCard: View {
                                     .monospacedDigit()
                                     .frame(maxWidth: .infinity)
                             }
+                            if !guests.isEmpty {
+                                let average = guestAverages[category]
+                                Text(average.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "–")
+                                    .font(Club.italic(16))
+                                    .foregroundStyle(average == nil ? Club.faint : Club.muted)
+                                    .monospacedDigit()
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityLabel(average.map { "Guests \(ScoreCategory.format($0))" } ?? "")
+                            }
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -116,9 +133,42 @@ struct ScoresCard: View {
                     .font(Club.italic(16))
                     .foregroundStyle(Club.muted)
             }
+            if !store.isMember {
+                guestFooter(mine: mine)
+            }
         }
         .padding(18)
         .clubCard()
+    }
+
+    /// "Score it" / "Edit mine": members always; guests once the club has rated it.
+    private func buttonLabel(memberScored: Bool, guestScored: Bool) -> String? {
+        if store.isMember { return memberScored ? "Edit mine" : "Score it" }
+        guard store.canScoreAsGuest, store.clubHasRated(dinner.id) else { return nil }
+        return guestScored ? "Edit mine" : "Score it"
+    }
+
+    @ViewBuilder
+    private func guestFooter(mine: [ScoreCategory: Double]) -> some View {
+        Divider().overlay(Club.hairline)
+        if !mine.isEmpty {
+            HStack(spacing: 10) {
+                SpacedCaps(text: "Yours", size: 8.5, color: Club.faint)
+                ScoreStrip(scores: mine)
+            }
+        } else if !store.clubHasRated(dinner.id) {
+            Text("Guests can score it once the club has rated it.")
+                .font(Club.italic(14))
+                .foregroundStyle(Club.faint)
+        } else if !store.isSignedIn {
+            Text("Sign in to iCloud to add your scores.")
+                .font(Club.italic(14))
+                .foregroundStyle(Club.faint)
+        } else {
+            Text("Been? Add your scores to the guest average.")
+                .font(Club.italic(14))
+                .foregroundStyle(Club.faint)
+        }
     }
 }
 

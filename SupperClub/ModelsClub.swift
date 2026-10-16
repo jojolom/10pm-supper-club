@@ -2,18 +2,34 @@
 //  ModelsClub.swift
 //  10PM Supper Club
 //
-//  The club's data: its members, its Volumes (one per year: Volume I is 2025), the dinners, each
-//  member's ranking of a Volume's dinners (an order, no scores), and each member's note, best
-//  dish and category scores for a dinner (Food, Drinks, Service, Cigability, Vibe: 1–10 in
-//  half points, shown per person, never part of the club's order). Plus Standings: the club's combined order (by average position)
-//  and each member's own list. No UI or CloudKit here, so scripts/standings-check.swift can
-//  check it.
+//  The club's data: who's in it (ClubInfo: the founder and everyone they've let in), its
+//  Volumes (one per year: Volume I is 2025), the dinners, each member's ranking of a Volume's
+//  dinners (an order, no scores), and each member's note, best dish and category scores for a
+//  dinner (Food, Drinks, Service, Cigability, Vibe: 1–10 in half points, shown per person,
+//  never part of the club's order). Guests (anyone else with the app) can score dinners the
+//  club has rated; theirs are averaged apart from the club's. Plus Standings: the club's
+//  combined order (by average position) and each member's own list. No UI or CloudKit here, so
+//  scripts/standings-check.swift can check it.
 //
 
 import Foundation
 
+/// Who's in the club: whoever started it and everyone they've let in. Only members add, rank
+/// and score dinners; anyone else with the app is a guest. One per club, written only by the
+/// founder.
+struct ClubInfo: Hashable, Codable {
+    var founderID: String
+    /// Everyone in the club, the founder included.
+    var memberIDs: [String]
+    /// People who asked to join and were turned down, so they stop showing as requests.
+    var declinedIDs: [String] = []
+
+    func isMember(_ id: String) -> Bool { !id.isEmpty && memberIDs.contains(id) }
+}
+
+/// Anyone with the app who has asked to join, or is in the club: their name.
 struct Member: Identifiable, Hashable, Codable {
-    /// The member's iCloud user record name (stable across their devices).
+    /// Their iCloud user record name (stable across their devices).
     var id: String
     var name: String
     var joined: Date = .now
@@ -146,9 +162,20 @@ enum ScoreCategory: String, CaseIterable, Codable, Identifiable {
     static func format(_ score: Double) -> String {
         score.rounded() == score ? String(Int(score)) : String(format: "%.1f", score)
     }
+
+    /// Each category's average over the score sets that have it (for guests' scores).
+    static func averages(_ sets: [[ScoreCategory: Double]]) -> [ScoreCategory: Double] {
+        var out: [ScoreCategory: Double] = [:]
+        for category in allCases {
+            let scores = sets.compactMap { $0[category] }
+            if !scores.isEmpty { out[category] = scores.reduce(0, +) / Double(scores.count) }
+        }
+        return out
+    }
 }
 
-/// One member's take on one dinner: a note, their standout dish, and category scores.
+/// One person's take on one dinner: a note, their standout dish, and category scores. A
+/// guest's has scores only.
 struct Review: Hashable, Codable, Identifiable {
     var memberID: String
     var dinnerID: String

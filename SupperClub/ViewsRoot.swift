@@ -2,9 +2,9 @@
 //  ViewsRoot.swift
 //  10PM Supper Club
 //
-//  What's on screen for where you stand: loading, iCloud missing, not in a club yet (start one
-//  or open a friend's invite), asked for your name, or the club itself: four tabs (the Club's
-//  ranking, My List, Dinners, Members).
+//  What's on screen for where you stand: loading, no club yet (start it), first open (in the
+//  club, or just browsing), asked for your name, or the club itself: the Club's ranking, My
+//  List (members only), Dinners, Members.
 //
 
 import SwiftUI
@@ -18,10 +18,8 @@ struct RootView: View {
             switch store.phase {
             case .loading:
                 Wordmark(scale: 1.1)
-            case .noAccount(let message):
-                WelcomeView(message: message)
-            case .noClub:
-                WelcomeView(message: nil)
+            case .noClub, .welcome:
+                WelcomeView()
             case .needsProfile:
                 ProfileSetupView()
             case .ready:
@@ -34,10 +32,10 @@ struct RootView: View {
 
 // MARK: - Welcome
 
+/// First open: start the club if nobody has, otherwise say you're in it (and ask to be let in)
+/// or just look around as a guest.
 struct WelcomeView: View {
-    let message: String?
     @Environment(ClubStore.self) private var store
-    @State private var inbox = ShareInbox.shared
     @State private var isStarting = false
     @State private var error: String?
 
@@ -47,34 +45,28 @@ struct WelcomeView: View {
             Wordmark(scale: 1.35)
             Spacer()
             VStack(spacing: 16) {
-                if let message {
-                    Text(message)
-                        .font(Club.italic(17))
-                        .foregroundStyle(Club.muted)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Button {
-                        isStarting = true
-                        Task {
-                            do { try await store.createClub() } catch { self.error = error.localizedDescription }
-                            isStarting = false
+                if store.phase == .noClub {
+                    if store.isSignedIn {
+                        WelcomeButton(title: "Start the Club", isWorking: isStarting) {
+                            isStarting = true
+                            Task {
+                                do { try await store.startClub() } catch { self.error = error.localizedDescription }
+                                isStarting = false
+                            }
                         }
-                    } label: {
-                        HStack {
-                            if isStarting { ProgressView().tint(Club.black) }
-                            SpacedCaps(text: "Start the Club", size: 14, color: Club.black)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(Club.cream, in: Capsule())
+                    } else {
+                        note("Sign in to iCloud in Settings to start the club.")
                     }
-                    .disabled(isStarting)
-                    Text("Got an invite? Open the link a friend sent you, and you're in.")
-                        .font(Club.italic(16))
-                        .foregroundStyle(Club.muted)
-                        .multilineTextAlignment(.center)
+                } else {
+                    WelcomeButton(title: "Just Browsing") { store.browse() }
+                    if store.isSignedIn {
+                        WelcomeButton(title: "I'm in the Club", isPrimary: false) { store.askToJoin() }
+                        note("Browse the club's dinners and score the ones they've rated. In the club? Ask to be let in.")
+                    } else {
+                        note("Browse the club's dinners. To score them, sign in to iCloud in Settings.")
+                    }
                 }
-                if let error = error ?? inbox.error {
+                if let error = error ?? store.lastError {
                     Text(error)
                         .font(.footnote)
                         .foregroundStyle(.red.opacity(0.8))
@@ -86,6 +78,35 @@ struct WelcomeView: View {
             SpacedCaps(text: "New York City", size: 10, color: Club.faint)
                 .padding(.bottom, 12)
         }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(Club.italic(16))
+            .foregroundStyle(Club.muted)
+            .multilineTextAlignment(.center)
+    }
+}
+
+/// A full-width capsule: cream for the main choice, outlined for the other.
+private struct WelcomeButton: View {
+    let title: String
+    var isPrimary = true
+    var isWorking = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                if isWorking { ProgressView().tint(Club.black) }
+                SpacedCaps(text: title, size: 14, color: isPrimary ? Club.black : Club.cream)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(isPrimary ? Club.cream : .clear, in: Capsule())
+            .overlay(Capsule().stroke(Club.cream.opacity(isPrimary ? 0 : 0.5), lineWidth: 1))
+        }
+        .disabled(isWorking)
     }
 }
 
@@ -104,10 +125,13 @@ struct ProfileSetupView: View {
                 Text("Your seat at the table")
                     .font(Club.serif(28))
                     .foregroundStyle(Club.cream)
-                Text("What should the club call you?")
+                Text(store.isMember ? "What should the club call you?"
+                     : "Tell the club who you are, and \(store.founder?.firstName ?? "the founder") will let you in.")
                     .font(Club.italic(17))
                     .foregroundStyle(Club.muted)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 32)
             TextField("", text: $name, prompt: Text("Your name").foregroundStyle(Club.faint))
                 .font(Club.serif(26))
                 .foregroundStyle(Club.cream)
@@ -121,7 +145,7 @@ struct ProfileSetupView: View {
                 .onSubmit(save)
             Spacer()
             Button(action: save) {
-                SpacedCaps(text: "Take My Seat", size: 14, color: Club.black)
+                SpacedCaps(text: store.isMember ? "Take My Seat" : "Ask to Join", size: 14, color: Club.black)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                     .background(Club.cream.opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.35 : 1), in: Capsule())
@@ -154,8 +178,10 @@ struct ClubTabs: View {
             Tab("Club", systemImage: "crown", value: 0) {
                 NavigationStack(path: $path) { ClubRankingView() }
             }
-            Tab("My List", systemImage: "arrow.up.arrow.down", value: 1) {
-                NavigationStack { MyListView() }
+            if store.isMember {
+                Tab("My List", systemImage: "arrow.up.arrow.down", value: 1) {
+                    NavigationStack { MyListView() }
+                }
             }
             Tab("Dinners", systemImage: "fork.knife", value: 2) {
                 NavigationStack { DinnersView() }

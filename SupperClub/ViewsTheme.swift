@@ -4,7 +4,7 @@
 //
 //  The look, from the club's merch: near-black, cream embroidery-coloured type, a classic
 //  serif (Baskerville) for names and numbers, wide-spaced capitals for labels, and thin cream
-//  rules. Shared pieces: the wordmark, the Volume label, member initials, cards.
+//  rules. Shared pieces: the wordmark, the Volume label, member initials, the guests' badge, cards.
 //
 
 import SwiftUI
@@ -99,6 +99,30 @@ struct MemberBadge: View {
             .background(Circle().fill(isMe ? Club.cream : Club.raised))
             .overlay(Circle().stroke(Club.cream.opacity(isMe ? 0 : 0.35), lineWidth: 1))
             .accessibilityLabel(member?.name ?? "Unknown")
+    }
+}
+
+/// The guests, as a column head: a dashed ring with how many scored.
+struct GuestsBadge: View {
+    let count: Int
+    var size: CGFloat = 30
+
+    var body: some View {
+        Image(systemName: "person.2")
+            .font(.system(size: size * 0.36))
+            .foregroundStyle(Club.muted)
+            .frame(width: size, height: size)
+            .overlay(Circle().stroke(Club.cream.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+            .overlay(alignment: .topTrailing) {
+                Text("\(count)")
+                    .font(Club.serif(size * 0.32))
+                    .foregroundStyle(Club.black)
+                    .padding(.horizontal, 3)
+                    .background(Club.muted, in: Capsule())
+                    .offset(x: size * 0.18, y: -size * 0.12)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Guests' average, \(count) \(count == 1 ? "guest" : "guests")")
     }
 }
 

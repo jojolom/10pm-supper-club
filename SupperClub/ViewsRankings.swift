@@ -5,7 +5,7 @@
 //  The rankings: the Club's (everyone's lists combined by average position, each person's spot
 //  shown under it), My List (your own order: drag a dinner up or down; new dinners wait at the
 //  bottom until you place them), and Members (anyone's list, side by side with the club's, with
-//  their category scores under each dinner).
+//  their category scores under each dinner; for the founder, people asking to join).
 //
 
 import SwiftUI
@@ -26,9 +26,12 @@ struct ClubRankingView: View {
                     .padding(.top, 18)
                     .padding(.bottom, 6)
 
+                    if !store.isMember { GuestNote() }
+
                     let rows = store.standings
                     if rows.isEmpty {
-                        EmptyState(title: "No dinners yet", message: "Add the first dinner of the Volume from the Dinners tab.")
+                        EmptyState(title: "No dinners yet",
+                                   message: store.isMember ? "Add the first dinner of the Volume from the Dinners tab." : "The club hasn't been out this Volume yet.")
                     } else {
                         VStack(spacing: 10) {
                             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
@@ -49,6 +52,30 @@ struct ClubRankingView: View {
             }
             .navigationDestination(for: Dinner.self) { DinnerDetailView(dinnerID: $0.id) }
         }
+    }
+}
+
+/// For guests, at the top of the Club page: what they can do, or that they're waiting to be let in.
+private struct GuestNote: View {
+    @Environment(ClubStore.self) private var store
+
+    var body: some View {
+        let text = store.hasAskedToJoin
+            ? "You've asked to join. \(store.founder?.firstName ?? "The founder") will let you in. Until then, you're a guest."
+            : store.isSignedIn
+                ? "You're a guest. Score any dinner the club has rated; yours count toward the guest average."
+                : "You're a guest. Sign in to iCloud to score dinners."
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: store.hasAskedToJoin ? "hourglass" : "person.2")
+                .font(.system(size: 13))
+                .foregroundStyle(Club.muted)
+            Text(text)
+                .font(Club.italic(15))
+                .foregroundStyle(Club.muted)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .clubCard()
     }
 }
 
@@ -226,11 +253,13 @@ private struct MyListRow: View {
 struct MembersView: View {
     @Environment(ClubStore.self) private var store
     @State private var selected: String?
-    @State private var showInvite = false
     @State private var showRename = false
     @State private var newName = ""
 
-    private var memberID: String { selected ?? store.meID }
+    /// Where friends get the app (TestFlight's public link); then they tap "I'm in the Club".
+    static let inviteURL = URL(string: "https://testflight.apple.com/join/qnFPRnue")!
+
+    private var memberID: String { selected ?? (store.isMember ? store.meID : store.members.first?.id ?? "") }
 
     var body: some View {
         ClubPage(title: "Members") {
@@ -251,8 +280,8 @@ struct MembersView: View {
                                 .buttonStyle(.plain)
                                 .accessibilityAddTraits(member.id == memberID ? .isSelected : [])
                             }
-                            if (store.backend as? CloudKitBackend)?.isFounder == true {
-                                Button { showInvite = true } label: {
+                            if store.isMember {
+                                ShareLink(item: Self.inviteURL, message: Text(Self.inviteMessage)) {
                                     VStack(spacing: 8) {
                                         Image(systemName: "plus")
                                             .font(.system(size: 20, weight: .light))
@@ -269,6 +298,7 @@ struct MembersView: View {
                         .padding(.top, 16)
                     }
 
+                    if store.isFounder, !store.requests.isEmpty { requests }
                     memberList
                 }
                 .padding(.bottom, 32)
@@ -277,12 +307,16 @@ struct MembersView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button {
-                            newName = store.me?.name ?? ""
-                            showRename = true
-                        } label: { Label("Change My Name", systemImage: "pencil") }
-                        if (store.backend as? CloudKitBackend)?.isFounder == true {
-                            Button { showInvite = true } label: { Label("Invite Friends", systemImage: "person.badge.plus") }
+                        if store.me != nil {
+                            Button {
+                                newName = store.me?.name ?? ""
+                                showRename = true
+                            } label: { Label("Change My Name", systemImage: "pencil") }
+                        } else if store.isSignedIn {
+                            Button { store.askToJoin() } label: { Label("I'm in the Club", systemImage: "person.badge.plus") }
+                        }
+                        ShareLink(item: Self.inviteURL, message: Text(store.isMember ? Self.inviteMessage : Self.shareMessage)) {
+                            Label(store.isMember ? "Invite Friends" : "Share the App", systemImage: "square.and.arrow.up")
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -294,8 +328,43 @@ struct MembersView: View {
                 Button("Save") { store.setMyName(newName) }
                 Button("Cancel", role: .cancel) {}
             }
-            .sheet(isPresented: $showInvite) { InviteSheet() }
         }
+    }
+
+    private static let inviteMessage = "Get the 10PM app, then tap \u{201C}I'm in the Club\u{201D} and we'll let you in."
+    private static let shareMessage = "The 10PM Supper Club's dinners, ranked."
+
+    /// For the founder: people asking to join.
+    private var requests: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SpacedCaps(text: "Asking to join", size: 10)
+                .padding(.horizontal, 4)
+            ForEach(store.requests) { person in
+                HStack(spacing: 12) {
+                    MemberBadge(member: person, size: 34)
+                    Text(person.name)
+                        .font(Club.serif(19))
+                        .foregroundStyle(Club.cream)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button("Not Now") { withAnimation(.snappy) { store.turnDown(person.id) } }
+                        .font(Club.serif(14, bold: false))
+                        .foregroundStyle(Club.muted)
+                    Button {
+                        withAnimation(.snappy) { store.letIn(person.id) }
+                    } label: {
+                        SpacedCaps(text: "Let In", size: 10, color: Club.black)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Club.cream, in: Capsule())
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(14)
+                .clubCard()
+            }
+        }
+        .padding(.horizontal, 16)
     }
 
     @ViewBuilder

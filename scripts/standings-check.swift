@@ -5,7 +5,8 @@
 //  puts dinners they haven't placed after it, newest first; only attendees rank a dinner; the
 //  club order goes by average position, ties to more first places, then the newer dinner, with
 //  unranked dinners last; "waiting on" names the attendees who haven't placed it; and Volumes
-//  are years (Volume I is 2025); category scores keep to 1–10 in half points.
+//  are years (Volume I is 2025); category scores keep to 1–10 in half points; guests' averages
+//  count only those who scored; and only the founder and those let in are members.
 //
 //  Run from the repo root:
 //    swiftc -parse-as-library -o /tmp/standings-check SupperClub/ModelsClub.swift scripts/standings-check.swift && /tmp/standings-check
@@ -70,6 +71,13 @@ struct StandingsCheck {
         check(ScoreCategory.format(9) == "9" && ScoreCategory.format(8.5) == "8.5", "score formatting")
         check(Review(memberID: "a", dinnerID: "x", scores: [.vibe: 7]).isEmpty == false
               && Review(memberID: "a", dinnerID: "x", scores: [.vibe: 7]).hasWords == false, "scores alone are a review without words")
+        // Guests' averages: per category, over only the guests who scored it.
+        let guestAverages = ScoreCategory.averages([[.food: 8, .vibe: 6], [.food: 9], [:]])
+        check(guestAverages == [.food: 8.5, .vibe: 6], "guest averages: \(guestAverages)")
+        check(ScoreCategory.averages([]).isEmpty, "no guests, no averages")
+        // Only the founder and those let in are members; nobody's ID is empty.
+        let roster = ClubInfo(founderID: "a", memberIDs: ["a", "b"])
+        check(roster.isMember("b") && !roster.isMember("g") && !roster.isMember(""), "club membership")
 
         print(failures == 0 ? "All standings checks passed." : "\(failures) failure(s).")
         exit(failures == 0 ? 0 : 1)

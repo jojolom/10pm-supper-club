@@ -4,11 +4,11 @@
 //
 //  The Volume's dinners as a gallery or on a dark map of the city; a dinner's page (cover and
 //  photos, where it ranks for the club and for each of you, everyone's category scores, note
-//  and best dish, the address); adding a dinner (find it with Apple Maps, pick the date and who was there, add a
-//  cover); and inviting friends (the club's iCloud share).
+//  and best dish, guests' average, the address); adding a dinner (find it with Apple Maps, pick
+//  the date and who was there, add a cover); and a guest's own scores. Only members add, edit,
+//  rank and write notes; guests look, and score dinners the club has rated.
 //
 
-import CloudKit
 import MapKit
 import PhotosUI
 import SwiftUI
@@ -28,7 +28,9 @@ struct DinnersView: View {
                 } else {
                     ScrollView {
                         if store.dinners.isEmpty {
-                            EmptyState(title: "The table's set", message: "Add the first dinner of \(store.volume?.title ?? "the Volume").")
+                            EmptyState(title: "The table's set",
+                                       message: store.isMember ? "Add the first dinner of \(store.volume?.title ?? "the Volume")."
+                                                               : "The club hasn't been out this Volume yet.")
                                 .padding(.top, 60)
                         }
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
@@ -50,8 +52,10 @@ struct DinnersView: View {
                         Image(systemName: showsMap ? "square.grid.2x2" : "map")
                     }
                     .accessibilityLabel(showsMap ? "Show as gallery" : "Show on map")
-                    Button { adding = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Add a dinner")
+                    if store.isMember {
+                        Button { adding = true } label: { Image(systemName: "plus") }
+                            .accessibilityLabel("Add a dinner")
+                    }
                 }
             }
             .sheet(isPresented: $adding) { AddDinnerView() }
@@ -123,6 +127,7 @@ struct DinnerDetailView: View {
     @Environment(ClubStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var editingReview = false
+    @State private var editingGuestScores = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var confirmDelete = false
 
@@ -150,7 +155,10 @@ struct DinnerDetailView: View {
                         }
 
                     rankings(dinner).padding(.horizontal, 16)
-                    ScoresCard(dinner: dinner) { editingReview = true }.padding(.horizontal, 16)
+                    ScoresCard(dinner: dinner) {
+                        if store.isMember { editingReview = true } else { editingGuestScores = true }
+                    }
+                    .padding(.horizontal, 16)
                     reviews(dinner).padding(.horizontal, 16)
                     photos(dinner)
                     details(dinner).padding(.horizontal, 16)
@@ -160,11 +168,13 @@ struct DinnerDetailView: View {
             .ignoresSafeArea(edges: .top)
             .background(Club.black.ignoresSafeArea())
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button { editingReview = true } label: { Label("My Scores & Notes", systemImage: "square.and.pencil") }
-                        Button(role: .destructive) { confirmDelete = true } label: { Label("Delete Dinner", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis") }
+                if store.isMember {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button { editingReview = true } label: { Label("My Scores & Notes", systemImage: "square.and.pencil") }
+                            Button(role: .destructive) { confirmDelete = true } label: { Label("Delete Dinner", systemImage: "trash") }
+                        } label: { Image(systemName: "ellipsis") }
+                    }
                 }
             }
             .confirmationDialog("Delete \(dinner.name) for everyone?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -174,6 +184,7 @@ struct DinnerDetailView: View {
                 }
             }
             .sheet(isPresented: $editingReview) { ReviewEditor(dinner: dinner) }
+            .sheet(isPresented: $editingGuestScores) { GuestScoreEditor(dinner: dinner) }
             .onChange(of: pickedPhotos) { _, items in
                 guard !items.isEmpty else { return }
                 Task {
@@ -244,13 +255,15 @@ struct DinnerDetailView: View {
             HStack {
                 SpacedCaps(text: "Notes from the table", size: 10)
                 Spacer()
-                Button { editingReview = true } label: {
-                    SpacedCaps(text: store.review(by: store.meID, of: dinner.id)?.hasWords == true ? "Edit mine" : "Add mine",
-                               size: 9.5, color: Club.cream)
+                if store.isMember {
+                    Button { editingReview = true } label: {
+                        SpacedCaps(text: store.review(by: store.meID, of: dinner.id)?.hasWords == true ? "Edit mine" : "Add mine",
+                                   size: 9.5, color: Club.cream)
+                    }
                 }
             }
             if reviews.isEmpty {
-                Text("No notes yet. What was the dish of the night?")
+                Text(store.isMember ? "No notes yet. What was the dish of the night?" : "No notes from the table yet.")
                     .font(Club.italic(16))
                     .foregroundStyle(Club.muted)
             }
@@ -282,13 +295,15 @@ struct DinnerDetailView: View {
             HStack {
                 SpacedCaps(text: "Photos", size: 10)
                 Spacer()
-                PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 10, matching: .images) {
-                    SpacedCaps(text: "Add", size: 9.5, color: Club.cream)
+                if store.isMember {
+                    PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 10, matching: .images) {
+                        SpacedCaps(text: "Add", size: 9.5, color: Club.cream)
+                    }
                 }
             }
             .padding(.horizontal, 16)
             if dinner.photoIDs.isEmpty {
-                Text("Add photos from the night.")
+                Text(store.isMember ? "Add photos from the night." : "No photos yet.")
                     .font(Club.italic(16))
                     .foregroundStyle(Club.muted)
                     .padding(.horizontal, 16)
@@ -417,6 +432,43 @@ private struct ReviewEditor: View {
                 bestDish = mine?.bestDish ?? ""
                 scores = mine?.scores ?? [:]
             }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+/// A guest's own scores for a dinner the club has rated.
+private struct GuestScoreEditor: View {
+    let dinner: Dinner
+    @Environment(ClubStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var scores: [ScoreCategory: Double] = [:]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ScoreEditor(scores: $scores)
+                } header: {
+                    Text("Your scores")
+                } footer: {
+                    Text("Out of 10, in half points. Yours count toward the guest average, shown apart from the club's.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Club.black)
+            .navigationTitle(dinner.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        store.saveMyGuestScores(of: dinner.id, scores: scores)
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear { scores = store.myGuestReview(of: dinner.id)?.scores ?? [:] }
         }
         .presentationDetents([.large])
     }
@@ -614,44 +666,4 @@ final class RestaurantSearch: NSObject, MKLocalSearchCompleterDelegate {
     func details(for completion: MKLocalSearchCompletion) async -> MKMapItem? {
         try? await MKLocalSearch(request: MKLocalSearch.Request(completion: completion)).start().mapItems.first
     }
-}
-
-// MARK: - Inviting
-
-/// The club's invite: iOS's share sheet for the iCloud share (copy the link, or send it in Messages).
-struct InviteSheet: View {
-    @Environment(ClubStore.self) private var store
-    @State private var share: CKShare?
-    @State private var error: String?
-
-    var body: some View {
-        Group {
-            if let share, let cloud = store.backend as? CloudKitBackend {
-                CloudSharingView(share: share, container: cloud.container)
-                    .ignoresSafeArea()
-            } else if let error {
-                EmptyState(title: "Couldn't open the invite", message: error)
-            } else {
-                ProgressView().tint(Club.cream)
-            }
-        }
-        .background(Club.black)
-        .task {
-            guard let cloud = store.backend as? CloudKitBackend else { error = "Invites need iCloud."; return }
-            do { share = try await cloud.clubShare() } catch { self.error = error.localizedDescription }
-        }
-    }
-}
-
-private struct CloudSharingView: UIViewControllerRepresentable {
-    let share: CKShare
-    let container: CKContainer
-
-    func makeUIViewController(context: Context) -> UICloudSharingController {
-        let controller = UICloudSharingController(share: share, container: container)
-        controller.availablePermissions = [.allowReadWrite, .allowPublic]
-        return controller
-    }
-
-    func updateUIViewController(_ controller: UICloudSharingController, context: Context) {}
 }

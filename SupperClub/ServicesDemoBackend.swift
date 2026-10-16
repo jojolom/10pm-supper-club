@@ -2,9 +2,10 @@
 //  ServicesDemoBackend.swift
 //  10PM Supper Club
 //
-//  An in-memory club with four members and NYC dinners in 2025 and 2026 (Volumes I and II), for the Simulator
-//  (where iCloud sharing can't be tried) and screenshots. Debug builds launched with
-//  `-demo YES` use it; nothing is saved.
+//  An in-memory club with four members, a friend asking to join, guests' scores and NYC dinners
+//  in 2025 and 2026 (Volumes I and II), for the Simulator and screenshots. Debug builds
+//  launched with `-demo YES` use it, as Joe (the founder), or as a guest with `-guest YES`;
+//  nothing is saved.
 //
 
 import Foundation
@@ -13,10 +14,10 @@ final class DemoBackend: ClubBackend {
 
     private var snapshot: ClubSnapshot
     private var photos: [String: Data] = [:]
-    private(set) var hasClub = true
-    private let meID = "demo-joe"
+    private let meID: String
 
-    init() {
+    init(asGuest: Bool = false) {
+        meID = asGuest ? "demo-guest" : "demo-joe"
         let day: TimeInterval = 86_400
         let now = Date()
         let members = [
@@ -70,12 +71,21 @@ final class DemoBackend: ClubBackend {
             Review(memberID: ids[0], dinnerID: "carbone", scores: [.food: 8.5, .drinks: 7.5, .service: 9, .cigability: 7, .vibe: 9.5]),
             Review(memberID: ids[0], dinnerID: "lilia", scores: [.food: 9, .drinks: 6.5, .service: 7.5, .cigability: 9, .vibe: 7]),
         ]
-        snapshot = ClubSnapshot(members: members, dinners: dinners, rankings: rankings, reviews: reviews)
+        let guestReviews = [
+            Review(memberID: "demo-g1", dinnerID: "coucou", scores: [.food: 9, .drinks: 8, .service: 9, .cigability: 2, .vibe: 8.5]),
+            Review(memberID: "demo-g2", dinnerID: "coucou", scores: [.food: 8.5, .drinks: 9, .service: 8.5, .vibe: 9]),
+            Review(memberID: "demo-g1", dinnerID: "carbone", scores: [.food: 8, .drinks: 7.5, .service: 8, .cigability: 5, .vibe: 9.5]),
+        ]
+        let club = ClubInfo(founderID: ids[0], memberIDs: ids)
+        let asking = Member(id: "demo-sam", name: "Sam", joined: now - 2 * day)
+        snapshot = ClubSnapshot(club: club, members: members + [asking], dinners: dinners, rankings: rankings,
+                                reviews: reviews, guestReviews: guestReviews)
     }
 
-    func currentUserID() async throws -> String { meID }
-    func createClub() async throws { hasClub = true }
+    func currentUserID() async -> String? { meID }
     func load() async throws -> ClubSnapshot { snapshot }
+
+    func save(_ club: ClubInfo) async throws { snapshot.club = club }
 
     func save(_ member: Member) async throws { upsert(member, \.members) }
     func save(_ dinner: Dinner) async throws { upsert(dinner, \.dinners) }
@@ -85,6 +95,7 @@ final class DemoBackend: ClubBackend {
         snapshot.rankings.append(ranking)
     }
     func save(_ review: Review) async throws { upsert(review, \.reviews) }
+    func saveGuestReview(_ review: Review) async throws { upsert(review, \.guestReviews) }
 
     func savePhoto(_ jpeg: Data, dinnerID: String) async throws -> String {
         let id = UUID().uuidString
