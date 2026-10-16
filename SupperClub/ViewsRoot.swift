@@ -245,5 +245,32 @@ struct ClubPage<Content: View>: View {
                 }
             }
             .refreshable { await store.refresh() }
+            .safeAreaInset(edge: .top) {
+                if let error = store.saveError { SaveErrorBar(message: error) }
+            }
+    }
+}
+
+/// An edit iCloud wouldn't save: says so (rather than letting it quietly vanish), tap to dismiss.
+private struct SaveErrorBar: View {
+    let message: String
+    @Environment(ClubStore.self) private var store
+
+    var body: some View {
+        Button { store.dismissSaveError() } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.icloud")
+                Text(message).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "xmark").font(.caption)
+            }
+            .font(.footnote)
+            .foregroundStyle(Club.cream)
+            .padding(12)
+            .background(Color.red.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
     }
 }

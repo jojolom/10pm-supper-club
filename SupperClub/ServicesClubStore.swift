@@ -70,6 +70,8 @@ final class ClubStore {
     var volumeID: String?
     private(set) var isRefreshing = false
     private(set) var lastError: String?
+    /// The last edit iCloud wouldn't save, shown until dismissed.
+    private(set) var saveError: String?
     private var photoCache: [String: UIImage] = [:]
     /// Edits made here in the last minute, applied again over each load: new records in the
     /// public database take a few seconds to show up in queries.
@@ -321,7 +323,7 @@ final class ClubStore {
                 dinner.photoIDs.append(id)
                 save(dinner)
             } catch {
-                lastError = error.localizedDescription
+                saveError = "Couldn't save a photo: \(error.localizedDescription)"
             }
         }
     }
@@ -341,13 +343,14 @@ final class ClubStore {
         recentEdits.append((.now, apply))
     }
 
+    func dismissSaveError() { saveError = nil }
+
     private func persist(_ work: @escaping (ClubBackend) async throws -> Void) {
         Task {
             do {
                 try await work(backend)
-                lastError = nil
             } catch {
-                lastError = error.localizedDescription
+                saveError = "Couldn't save to iCloud: \(error.localizedDescription)"
             }
         }
     }

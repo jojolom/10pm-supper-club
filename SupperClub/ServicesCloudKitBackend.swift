@@ -20,6 +20,13 @@ final class CloudKitBackend: ClubBackend {
     static let containerID = "iCloud.com.joelombardi.tenpmsupperclub"
     static let clubRecordName = "club"
 
+    /// A Member record is named "member-<user record name>": user record names start with an
+    /// underscore, which CloudKit doesn't allow at the start of a record name.
+    private static func memberRecordName(_ id: String) -> String { "member-\(id)" }
+    private static func memberID(fromRecordName name: String) -> String {
+        name.hasPrefix("member-") ? String(name.dropFirst("member-".count)) : name
+    }
+
     let container = CKContainer(identifier: containerID)
     private var database: CKDatabase { container.publicCloudDatabase }
 
@@ -69,7 +76,7 @@ final class CloudKitBackend: ClubBackend {
             snapshot.club = ClubInfo(founderID: founder, memberIDs: record["memberIDs"] as? [String] ?? [founder],
                                      declinedIDs: record["declinedIDs"] as? [String] ?? [])
         case "Member":
-            snapshot.members.append(Member(id: name, name: record["name"] as? String ?? "", joined: record["joined"] as? Date ?? .distantPast))
+            snapshot.members.append(Member(id: memberID(fromRecordName: name), name: record["name"] as? String ?? "", joined: record["joined"] as? Date ?? .distantPast))
         case "Dinner":
             snapshot.dinners.append(Dinner(
                 id: name, name: record["name"] as? String ?? "",
@@ -122,7 +129,7 @@ final class CloudKitBackend: ClubBackend {
     }
 
     func save(_ member: Member) async throws {
-        try await write(record("Member", member.id, ["name": member.name, "joined": member.joined]))
+        try await write(record("Member", Self.memberRecordName(member.id), ["name": member.name, "joined": member.joined]))
     }
 
     func save(_ dinner: Dinner) async throws {
