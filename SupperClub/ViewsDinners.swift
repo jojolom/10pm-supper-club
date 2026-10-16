@@ -168,13 +168,17 @@ struct DinnerDetailView: View {
             .ignoresSafeArea(edges: .top)
             .background(Club.black.ignoresSafeArea())
             .toolbar {
-                if store.isMember {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if store.isMember {
                             Button { editingReview = true } label: { Label("My Scores & Notes", systemImage: "square.and.pencil") }
                             Button(role: .destructive) { confirmDelete = true } label: { Label("Delete Dinner", systemImage: "trash") }
-                        } label: { Image(systemName: "ellipsis") }
-                    }
+                        } else {
+                            Link(destination: Support.reportURL(about: dinner)) {
+                                Label("Report a Problem", systemImage: "exclamationmark.bubble")
+                            }
+                        }
+                    } label: { Image(systemName: "ellipsis") }
                 }
             }
             .confirmationDialog("Delete \(dinner.name) for everyone?", isPresented: $confirmDelete, titleVisibility: .visible) {

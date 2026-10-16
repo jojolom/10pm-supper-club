@@ -318,6 +318,7 @@ struct MembersView: View {
                         ShareLink(item: Self.inviteURL, message: Text(store.isMember ? Self.inviteMessage : Self.shareMessage)) {
                             Label(store.isMember ? "Invite Friends" : "Share the App", systemImage: "square.and.arrow.up")
                         }
+                        Link(destination: Support.pageURL) { Label("Support & Privacy", systemImage: "questionmark.circle") }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
