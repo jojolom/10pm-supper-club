@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 @main
 struct SupperClubApp: App {
@@ -23,6 +24,8 @@ struct SupperClubApp: App {
         let backend: ClubBackend = CloudKitBackend()
         #endif
         _store = State(initialValue: ClubStore(backend: backend))
+        // Pull to refresh shows the club's cap (RefreshHat) in place of the system spinner.
+        UIRefreshControl.appearance().tintColor = .clear
     }
 
     var body: some Scene {
@@ -40,11 +43,16 @@ struct SupperClubApp: App {
                     // Pick up friends' changes while the app is open.
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(30))
-                        if scenePhase == .active, store.phase == .ready { await store.refresh() }
+                        guard scenePhase == .active else { continue }
+                        if store.phase == .ready { await store.refresh() }
+                        // Never reached iCloud: keep trying (and pick up an iCloud sign-in).
+                        else if store.phase == .unreachable { await store.start() }
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active, store.phase == .ready { Task { await store.refresh() } }
+                    guard phase == .active else { return }
+                    if store.phase == .ready { Task { await store.refresh() } }
+                    else if store.phase == .unreachable { Task { await store.start() } }
                 }
         }
     }

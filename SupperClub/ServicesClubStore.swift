@@ -55,6 +55,8 @@ final class ClubStore {
 
     enum Phase: Equatable {
         case loading
+        /// iCloud couldn't be reached on the first load, so it's not known yet whether there's a club.
+        case unreachable
         /// Nobody has started the club yet.
         case noClub
         /// There's a club, and this person hasn't said whether they're in it or just looking.
@@ -72,6 +74,8 @@ final class ClubStore {
     /// The Volume on screen (this year's, unless another's picked).
     var volumeID: String?
     private(set) var isRefreshing = false
+    /// Whether a load has ever worked: until one has, nothing (not even "no club") is known.
+    private(set) var hasLoaded = false
     private(set) var lastError: String?
     /// The last edit iCloud wouldn't save, shown until dismissed.
     private(set) var saveError: String?
@@ -85,14 +89,17 @@ final class ClubStore {
     private static let browsingKey = "club.browsing"
     private static let blockedKey = "club.blocked"
     /// People this viewer has blocked (on this device): their notes, scores and list are hidden.
-    private(set) var blockedIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: ClubStore.blockedKey) ?? [])
+    private(set) var blockedIDs: Set<String>
+    /// The demo club keeps its choices to itself, so trying it changes nothing in the real one.
+    private var demoBrowsing = false
     private var hasChosenToBrowse: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.browsingKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.browsingKey) }
+        get { isDemo ? demoBrowsing : UserDefaults.standard.bool(forKey: Self.browsingKey) }
+        set { if isDemo { demoBrowsing = newValue } else { UserDefaults.standard.set(newValue, forKey: Self.browsingKey) } }
     }
 
     init(backend: ClubBackend) {
         self.backend = backend
+        blockedIDs = backend is DemoBackend ? [] : Set(UserDefaults.standard.stringArray(forKey: Self.blockedKey) ?? [])
     }
 
     /// The sample club, where nothing is saved.
@@ -200,16 +207,20 @@ final class ClubStore {
             recentEdits.removeAll { $0.at < .now - 60 }
             for edit in recentEdits { edit.apply(&loaded) }
             snapshot = loaded
+            hasLoaded = true
             lastError = nil
             updatePhase()
         } catch {
             lastError = error.localizedDescription
-            if phase == .loading { phase = .welcome }
+            updatePhase()
         }
     }
 
     private func updatePhase() {
-        if snapshot.club == nil {
+        if !hasLoaded {
+            // Not "no club": offering to start one here could overwrite the real one.
+            phase = .unreachable
+        } else if snapshot.club == nil {
             phase = .noClub
         } else if isMember {
             phase = me == nil ? .needsProfile : .ready
@@ -224,7 +235,7 @@ final class ClubStore {
 
     /// Starts the club, with this person as its founder (they say their name next).
     func startClub() async throws {
-        guard isSignedIn, snapshot.club == nil else { return }
+        guard isSignedIn, hasLoaded, snapshot.club == nil else { return }
         let club = ClubInfo(founderID: meID, memberIDs: [meID])
         try await backend.save(club)
         edit { $0.club = club }
@@ -241,6 +252,12 @@ final class ClubStore {
     func askToJoin() {
         guard isSignedIn else { return }
         isJoining = true
+        updatePhase()
+    }
+
+    /// "Not now" on the name screen: back to looking around.
+    func cancelJoining() {
+        isJoining = false
         updatePhase()
     }
 
@@ -277,12 +294,16 @@ final class ClubStore {
     func block(_ id: String) {
         guard id != meID else { return }
         blockedIDs.insert(id)
-        UserDefaults.standard.set(Array(blockedIDs), forKey: Self.blockedKey)
+        saveBlocked()
     }
 
     func unblock(_ id: String) {
         blockedIDs.remove(id)
-        UserDefaults.standard.set(Array(blockedIDs), forKey: Self.blockedKey)
+        saveBlocked()
+    }
+
+    private func saveBlocked() {
+        if !isDemo { UserDefaults.standard.set(Array(blockedIDs), forKey: Self.blockedKey) }
     }
 
     // MARK: Deleting my info

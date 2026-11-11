@@ -16,12 +16,19 @@ struct RootView: View {
         // The demo bar sits above every screen (not over it: an inset would cover the tabs'
         // toolbars).
         VStack(spacing: 0) {
-            if store.isDemo { DemoBar() }
+            if store.isDemo, !Self.hidesDemoBar { DemoBar() }
             phaseView
         }
         .background(Club.black.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.35), value: store.phase)
     }
+
+    /// Debug builds launched with `-noDemoBar YES` leave it off, for App Store screenshots.
+    #if DEBUG
+    private static let hidesDemoBar = UserDefaults.standard.bool(forKey: "noDemoBar")
+    #else
+    private static let hidesDemoBar = false
+    #endif
 
     private var phaseView: some View {
         ZStack {
@@ -29,6 +36,8 @@ struct RootView: View {
             switch store.phase {
             case .loading:
                 Wordmark(scale: 1.1)
+            case .unreachable:
+                UnreachableView()
             case .noClub, .welcome:
                 WelcomeView()
             case .needsProfile:
@@ -77,13 +86,15 @@ struct WelcomeView: View {
                         note("Browse the club's dinners. To score them, sign in to iCloud in Settings.")
                     }
                 }
-                Button { showDemo(true) } label: {
-                    Text("Explore the demo club")
-                        .font(Club.serif(16))
-                        .underline()
-                        .foregroundStyle(Club.cream.opacity(0.85))
+                if !store.isDemo {
+                    Button { showDemo(true) } label: {
+                        Text("Explore the demo club")
+                            .font(Club.serif(16))
+                            .underline()
+                            .foregroundStyle(Club.cream.opacity(0.85))
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(.top, 4)
                 if let error = error ?? store.lastError {
                     Text(error)
                         .font(.footnote)
@@ -125,6 +136,47 @@ private struct WelcomeButton: View {
             .overlay(Capsule().stroke(Club.cream.opacity(isPrimary ? 0 : 0.5), lineWidth: 1))
         }
         .disabled(isWorking)
+    }
+}
+
+/// The first load failed (offline, or iCloud is down): say so and try again, rather than
+/// guessing there's no club.
+private struct UnreachableView: View {
+    @Environment(ClubStore.self) private var store
+    @Environment(\.showDemo) private var showDemo
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            Wordmark(scale: 1.35)
+            Spacer()
+            VStack(spacing: 16) {
+                Text("Can't reach the club right now. Check your connection.")
+                    .font(Club.italic(16))
+                    .foregroundStyle(Club.muted)
+                    .multilineTextAlignment(.center)
+                WelcomeButton(title: "Try Again", isWorking: store.isRefreshing) {
+                    Task { await store.start() }
+                }
+                Button { showDemo(true) } label: {
+                    Text("Explore the demo club")
+                        .font(Club.serif(16))
+                        .underline()
+                        .foregroundStyle(Club.cream.opacity(0.85))
+                }
+                .padding(.top, 4)
+                if let error = store.lastError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 24)
+            SpacedCaps(text: "New York City", size: 10, color: Club.faint)
+                .padding(.bottom, 12)
+        }
     }
 }
 
@@ -172,7 +224,14 @@ struct ProfileSetupView: View {
             .padding(.horizontal, 32)
             TermsNote(action: store.isMember ? "taking your seat" : "asking to join")
                 .padding(.horizontal, 32)
-                .padding(.bottom, 24)
+                .padding(.bottom, store.isMember ? 24 : 4)
+            if !store.isMember {
+                // A way back for anyone who tapped "I'm in the Club" by mistake.
+                Button("Not now") { store.cancelJoining() }
+                    .font(Club.serif(16))
+                    .foregroundStyle(Club.muted)
+                    .padding(.bottom, 16)
+            }
         }
         .onAppear { focused = true }
     }
@@ -223,6 +282,10 @@ struct ClubTabs: View {
                 NavigationStack { MembersView() }
             }
         }
+        // My List goes when you leave the club (removed, or deleted your info): don't sit on it.
+        .onChange(of: store.isMember) { _, isMember in
+            if !isMember, tab == 1 { tab = 0 }
+        }
         #if DEBUG
         .onAppear {
             if let id = UserDefaults.standard.string(forKey: "dinner"), let dinner = store.dinner(id) { path = [dinner] }
@@ -258,11 +321,19 @@ struct VolumeSwitcher: View {
     }
 }
 
-/// Common chrome for a tab's page: black, the Volume switcher, pull to refresh, save errors.
+/// Common chrome for a tab's page: black, the Volume switcher, pull to refresh (with the club's
+/// cap for a spinner), save errors.
 struct ClubPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
     @Environment(ClubStore.self) private var store
+    /// How far the page is pulled down past its top (including the gap held open while it
+    /// reloads).
+    @State private var pull: CGFloat = 0
+    /// The page's top inset at rest: while it reloads, the system adds the held-open gap to the
+    /// scroll view's inset, which would otherwise read as no pull at all.
+    @State private var restingInset: CGFloat?
+    @State private var spin: RefreshHat.Spin?
 
     var body: some View {
         content
@@ -279,10 +350,78 @@ struct ClubPage<Content: View>: View {
                     VolumeSwitcher()
                 }
             }
-            .refreshable { await store.refresh() }
+            // Its own task: SwiftUI cancels the refresh action's task when the reload changes
+            // what's on screen, which would cut the spin short.
+            .refreshable { await Task { await pullToRefresh() }.value }
+            .onScrollGeometryChange(for: [CGFloat].self) { geometry in
+                [geometry.contentOffset.y, geometry.contentInsets.top]
+            } action: { _, scroll in
+                if spin == nil { restingInset = scroll[1] }
+                pull = max(0, -(scroll[0] + (restingInset ?? scroll[1])))
+                if pull < 1, spin?.end != nil { spin = nil }
+            }
+            .overlay(alignment: .top) { RefreshHat(pull: pull, spin: spin) }
             .safeAreaInset(edge: .top) {
                 if let error = store.saveError { SaveErrorBar(message: error) }
             }
+    }
+}
+
+extension ClubPage {
+    /// Spins the cap the other way, fast, while it reloads (for at least a beat, so a quick
+    /// reload still shows the spin).
+    private func pullToRefresh() async {
+        let started = Date.now
+        spin = RefreshHat.Spin(start: started, from: RefreshHat.angle(forPull: pull))
+        await store.refresh()
+        let rest = 1.2 - Date.now.timeIntervalSince(started)
+        if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
+        spin?.end = .now
+    }
+}
+
+/// Pull to refresh's spinner: the club's cap, turning slowly as the page is pulled down, then
+/// spinning fast the other way once it reloads. (The system spinner is hidden in the app's init.)
+struct RefreshHat: View {
+    let pull: CGFloat
+    let spin: Spin?
+
+    struct Spin: Equatable {
+        var start: Date
+        /// Where the slow turn had got to when the reload began.
+        var from: Double
+        /// When the reload finished: the cap stops there and fades as the page settles.
+        var end: Date?
+    }
+
+    private static let width: CGFloat = 76
+    /// Degrees per point pulled, and per second while reloading (the other way).
+    private static let dragTurn = 1.6
+    private static let spinSpeed = 900.0
+
+    static func angle(forPull pull: CGFloat) -> Double { Double(pull) * dragTurn }
+
+    var body: some View {
+        let height = Self.width * 0.8
+        // Sized to the gap the pull opens and centred in it, the same way while dragging, while
+        // reloading (a gap of about 60 points) and while the page settles, so it never covers
+        // the page or jumps in size. Its width bounds it however it's turned.
+        let fit = min(1, max(0, (pull - 8) / Self.width))
+        TimelineView(.animation(paused: spin == nil || spin?.end != nil)) { context in
+            ClubHat(width: Self.width, fabric: Club.raised, line: Club.cream, thread: Club.cream)
+                .rotationEffect(.degrees(angle(at: context.date)))
+        }
+        .frame(width: Self.width, height: height)
+        .scaleEffect(fit)
+        .opacity(min(1, fit * 2.5))
+        .offset(y: pull / 2 - height / 2)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func angle(at date: Date) -> Double {
+        guard let spin else { return Self.angle(forPull: pull) }
+        return spin.from - (spin.end ?? date).timeIntervalSince(spin.start) * Self.spinSpeed
     }
 }
 

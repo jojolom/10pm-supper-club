@@ -228,7 +228,8 @@ struct DinnerDetailView: View {
                     Text("#\(index + 1)")
                         .font(Club.serif(28))
                         .foregroundStyle(Club.cream)
-                    Text("of \(rows.count)")
+                    // Of the ranked ones (they come first): dinners nobody has placed don't count.
+                    Text("of \(rows.filter { $0.average != nil }.count)")
                         .font(Club.italic(15))
                         .foregroundStyle(Club.muted)
                 } else {
@@ -292,7 +293,7 @@ struct DinnerDetailView: View {
                 .clubCard()
                 .contextMenu {
                     if review.memberID != store.meID, let author = store.member(review.memberID) {
-                        Link(destination: Support.reportURL(about: dinner)) {
+                        Link(destination: Support.reportURL(about: dinner, note: review, by: author)) {
                             Label("Report This Note", systemImage: "exclamationmark.bubble")
                         }
                         Button(role: .destructive) { store.block(author.id) } label: {
@@ -385,18 +386,24 @@ private struct PhotoThumb: View {
     let photoID: String
     @Environment(ClubStore.self) private var store
     @State private var image: UIImage?
+    @State private var failed = false
 
     var body: some View {
         ZStack {
             Club.raised
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
+            } else if failed {
+                Image(systemName: "photo").foregroundStyle(Club.faint)
             } else {
                 ProgressView().tint(Club.muted)
             }
         }
         .clipped()
-        .task { image = await store.image(photoID) }
+        .task {
+            image = await store.image(photoID)
+            failed = image == nil
+        }
     }
 }
 
@@ -638,7 +645,7 @@ struct AddDinnerView: View {
 
     private func save() async {
         isSaving = true
-        var dinner = Dinner(name: name.trimmingCharacters(in: .whitespaces), address: address,
+        let dinner = Dinner(name: name.trimmingCharacters(in: .whitespaces), address: address,
                             neighborhood: neighborhood, cuisine: cuisine, date: date,
                             latitude: coordinate?.latitude, longitude: coordinate?.longitude,
                             attendeeIDs: store.members.map(\.id).filter(attendees.contains), addedBy: store.meID)
@@ -648,7 +655,6 @@ struct AddDinnerView: View {
         }
         if let cover, let data = try? await cover.loadTransferable(type: Data.self), let jpeg = DinnerDetailView.jpeg(data) {
             await store.addPhotos([jpeg], to: dinner.id)
-            dinner = store.dinner(dinner.id) ?? dinner
         }
         isSaving = false
         dismiss()
