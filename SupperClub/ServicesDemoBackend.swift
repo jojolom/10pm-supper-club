@@ -94,6 +94,12 @@ final class DemoBackend: ClubBackend {
         snapshot.rankings.removeAll { $0.id == ranking.id }
         snapshot.rankings.append(ranking)
     }
+    func deleteAll(by memberID: String, in _: ClubSnapshot) async throws {
+        snapshot.members.removeAll { $0.id == memberID }
+        snapshot.rankings.removeAll { $0.memberID == memberID }
+        snapshot.reviews.removeAll { $0.memberID == memberID }
+        snapshot.guestReviews.removeAll { $0.memberID == memberID }
+    }
     func save(_ review: Review) async throws { upsert(review, \.reviews) }
     func saveGuestReview(_ review: Review) async throws { upsert(review, \.guestReviews) }
 

@@ -39,6 +39,9 @@ protocol ClubBackend: AnyObject {
     func save(_ member: Member) async throws
     func save(_ dinner: Dinner) async throws
     func delete(_ dinner: Dinner) async throws
+    /// Deletes everything this person wrote about themselves: their name (Member), rankings,
+    /// reviews and guest scores. Dinners and photos stay with the club.
+    func deleteAll(by memberID: String, in snapshot: ClubSnapshot) async throws
     func save(_ ranking: Ranking) async throws
     func save(_ review: Review) async throws
     func saveGuestReview(_ review: Review) async throws
@@ -80,6 +83,9 @@ final class ClubStore {
     private var isJoining = false
 
     private static let browsingKey = "club.browsing"
+    private static let blockedKey = "club.blocked"
+    /// People this viewer has blocked (on this device): their notes, scores and list are hidden.
+    private(set) var blockedIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: ClubStore.blockedKey) ?? [])
     private var hasChosenToBrowse: Bool {
         get { UserDefaults.standard.bool(forKey: Self.browsingKey) }
         set { UserDefaults.standard.set(newValue, forKey: Self.browsingKey) }
@@ -89,10 +95,15 @@ final class ClubStore {
         self.backend = backend
     }
 
+    /// The sample club, where nothing is saved.
+    var isDemo: Bool { backend is DemoBackend }
+
     // MARK: Who I am
 
     var isSignedIn: Bool { !meID.isEmpty }
-    var isMember: Bool { snapshot.club?.isMember(meID) == true }
+    /// In the club with a name (the founder counts before saying theirs). Someone who deleted
+    /// their info is a guest again.
+    var isMember: Bool { snapshot.club?.isMember(meID) == true && (me != nil || isFounder) }
     var isFounder: Bool { isSignedIn && snapshot.club?.founderID == meID }
     /// My name, if I'm a member or have asked to join.
     var me: Member? { snapshot.members.first { $0.id == meID } }
@@ -102,7 +113,7 @@ final class ClubStore {
 
     // MARK: Derived
 
-    /// The club's members, in the order they joined.
+    /// The club's members, in the order they joined (anyone who deleted their info is gone).
     var members: [Member] {
         guard let club = snapshot.club else { return [] }
         return snapshot.members.filter { club.isMember($0.id) }.sorted { $0.joined < $1.joined }
@@ -126,8 +137,9 @@ final class ClubStore {
         return Standings.club(dinners: dinners, rankings: clubRankings.filter { $0.volumeID == volume.id })
     }
 
-    /// Only what members wrote counts as the club's.
-    private var clubDinners: [Dinner] { snapshot.dinners.filter { isClubMember($0.addedBy) } }
+    /// Only what members wrote counts as the club's. Dinners stay when the member who added
+    /// them deletes their info; they go if the founder removes that member.
+    private var clubDinners: [Dinner] { snapshot.dinners.filter { snapshot.club?.isMember($0.addedBy) == true } }
     private var clubRankings: [Ranking] { snapshot.rankings.filter { isClubMember($0.memberID) } }
     private func isClubMember(_ id: String) -> Bool { snapshot.club?.isMember(id) == true }
 
@@ -145,12 +157,12 @@ final class ClubStore {
 
     /// Members' reviews with a note or best dish, for the dinner's notes.
     func reviews(for dinnerID: String) -> [Review] {
-        snapshot.reviews.filter { $0.dinnerID == dinnerID && $0.hasWords && isClubMember($0.memberID) }
+        snapshot.reviews.filter { $0.dinnerID == dinnerID && $0.hasWords && isClubMember($0.memberID) && !isBlocked($0.memberID) }
             .sorted { (member($0.memberID)?.joined ?? .now) < (member($1.memberID)?.joined ?? .now) }
     }
 
     func review(by memberID: String, of dinnerID: String) -> Review? {
-        guard isClubMember(memberID) else { return nil }
+        guard isClubMember(memberID), !isBlocked(memberID) else { return nil }
         return snapshot.reviews.first { $0.memberID == memberID && $0.dinnerID == dinnerID }
     }
 
@@ -245,6 +257,57 @@ final class ClubStore {
         updateClub { club in
             if !club.declinedIDs.contains(memberID) { club.declinedIDs.append(memberID) }
         }
+    }
+
+    /// Founder only: takes someone out of the club. What they wrote stops showing, and they're
+    /// a guest again (they can't ask to join again).
+    func removeFromClub(_ memberID: String) {
+        guard memberID != snapshot.club?.founderID else { return }
+        updateClub { club in
+            club.memberIDs.removeAll { $0 == memberID }
+            if !club.declinedIDs.contains(memberID) { club.declinedIDs.append(memberID) }
+        }
+    }
+
+    // MARK: Blocking
+
+    func isBlocked(_ id: String) -> Bool { blockedIDs.contains(id) }
+
+    /// Hides someone's notes, scores and list on this device.
+    func block(_ id: String) {
+        guard id != meID else { return }
+        blockedIDs.insert(id)
+        UserDefaults.standard.set(Array(blockedIDs), forKey: Self.blockedKey)
+    }
+
+    func unblock(_ id: String) {
+        blockedIDs.remove(id)
+        UserDefaults.standard.set(Array(blockedIDs), forKey: Self.blockedKey)
+    }
+
+    // MARK: Deleting my info
+
+    /// Whether there's anything of mine to delete.
+    var hasMyInfo: Bool {
+        isSignedIn && (me != nil || snapshot.rankings.contains { $0.memberID == meID }
+            || snapshot.reviews.contains { $0.memberID == meID } || snapshot.guestReviews.contains { $0.memberID == meID })
+    }
+
+    /// Deletes my name, rankings, notes and scores from iCloud. Dinners and photos stay with
+    /// the club. Afterwards this person is a guest (a founder is asked their name again).
+    func deleteMyInfo() async throws {
+        guard isSignedIn else { return }
+        try await backend.deleteAll(by: meID, in: snapshot)
+        let id = meID
+        edit { snapshot in
+            snapshot.members.removeAll { $0.id == id }
+            snapshot.rankings.removeAll { $0.memberID == id }
+            snapshot.reviews.removeAll { $0.memberID == id }
+            snapshot.guestReviews.removeAll { $0.memberID == id }
+        }
+        isJoining = false
+        hasChosenToBrowse = true
+        updatePhase()
     }
 
     private func updateClub(_ change: (inout ClubInfo) -> Void) {

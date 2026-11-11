@@ -146,6 +146,19 @@ final class CloudKitBackend: ClubBackend {
         _ = try await database.modifyRecords(saving: [], deleting: ids)
     }
 
+    func deleteAll(by memberID: String, in snapshot: ClubSnapshot) async throws {
+        var names = [Self.memberRecordName(memberID)]
+        names += snapshot.rankings.filter { $0.memberID == memberID }.map(\.id)
+        names += snapshot.reviews.filter { $0.memberID == memberID }.map(\.id)
+        names += snapshot.guestReviews.filter { $0.memberID == memberID }.map { "guest-\($0.id)" }
+        let results = try await database.modifyRecords(saving: [], deleting: names.map { CKRecord.ID(recordName: $0) },
+                                                       atomically: false).deleteResults
+        // Already gone is fine; anything else isn't.
+        for (_, result) in results {
+            if case .failure(let error) = result, (error as? CKError)?.code != .unknownItem { throw error }
+        }
+    }
+
     func save(_ ranking: Ranking) async throws {
         try await write(record("Ranking", ranking.id, ["memberID": ranking.memberID, "volumeID": ranking.volumeID,
                                                        "order": ranking.order, "updated": ranking.updated]))

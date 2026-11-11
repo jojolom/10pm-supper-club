@@ -252,9 +252,14 @@ private struct MyListRow: View {
 
 struct MembersView: View {
     @Environment(ClubStore.self) private var store
+    @Environment(\.showDemo) private var showDemo
     @State private var selected: String?
     @State private var showRename = false
     @State private var newName = ""
+    @State private var confirmRemove = false
+    @State private var confirmDelete = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     /// Where friends get the app (its App Store page); then they tap "I'm in the Club".
     static let inviteURL = URL(string: "https://apps.apple.com/app/id6823010763")!
@@ -318,7 +323,29 @@ struct MembersView: View {
                         ShareLink(item: Self.inviteURL, message: Text(store.isMember ? Self.inviteMessage : Self.shareMessage)) {
                             Label(store.isMember ? "Invite Friends" : "Share the App", systemImage: "square.and.arrow.up")
                         }
-                        Link(destination: Support.pageURL) { Label("Support & Privacy", systemImage: "questionmark.circle") }
+                        if let other = store.member(memberID), other.id != store.meID {
+                            Section(other.firstName) {
+                                if store.isBlocked(other.id) {
+                                    Button { store.unblock(other.id) } label: { Label("Unblock \(other.firstName)", systemImage: "hand.raised.slash") }
+                                } else {
+                                    Button { store.block(other.id) } label: { Label("Block \(other.firstName)", systemImage: "hand.raised") }
+                                }
+                                if store.isFounder {
+                                    Button(role: .destructive) { confirmRemove = true } label: {
+                                        Label("Remove from the Club", systemImage: "person.badge.minus")
+                                    }
+                                }
+                            }
+                        }
+                        Section {
+                            Link(destination: Support.pageURL) { Label("Support & Privacy", systemImage: "questionmark.circle") }
+                            if !store.isMember, !store.isDemo {
+                                Button { showDemo(true) } label: { Label("Explore the Demo Club", systemImage: "sparkles") }
+                            }
+                            if store.hasMyInfo {
+                                Button(role: .destructive) { confirmDelete = true } label: { Label("Delete My Info", systemImage: "trash") }
+                            }
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -329,6 +356,46 @@ struct MembersView: View {
                 Button("Save") { store.setMyName(newName) }
                 Button("Cancel", role: .cancel) {}
             }
+            .confirmationDialog("Remove \(store.member(memberID)?.firstName ?? "them") from the club?", isPresented: $confirmRemove,
+                                titleVisibility: .visible) {
+                Button("Remove", role: .destructive) {
+                    let id = memberID
+                    withAnimation(.snappy) {
+                        selected = nil
+                        store.removeFromClub(id)
+                    }
+                }
+            } message: {
+                Text("Their rankings, notes, scores and the dinners they added stop showing, and they can't ask to join again.")
+            }
+            .confirmationDialog("Delete your info?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete My Info", role: .destructive) { deleteMyInfo() }
+            } message: {
+                Text(store.isFounder
+                     ? "This deletes your name, rankings, notes and scores from iCloud. Dinners and photos stay with the club, and you stay its founder. This can't be undone."
+                     : "This deletes your name, rankings, notes and scores from iCloud, and you'll be a guest. Dinners and photos stay with the club. This can't be undone.")
+            }
+            .alert("Couldn't Delete Your Info", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteError ?? "")
+            }
+            .overlay {
+                if isDeleting { ProgressView().tint(Club.cream) }
+            }
+        }
+    }
+
+    private func deleteMyInfo() {
+        isDeleting = true
+        Task {
+            do {
+                try await store.deleteMyInfo()
+                selected = nil
+            } catch {
+                deleteError = error.localizedDescription
+            }
+            isDeleting = false
         }
     }
 
@@ -380,18 +447,21 @@ struct MembersView: View {
                     .foregroundStyle(Club.cream)
                 Spacer()
                 // Heads the right-hand column: where the club put each dinner.
-                if !list.ranked.isEmpty {
+                if !list.ranked.isEmpty, !store.isBlocked(memberID) {
                     SpacedCaps(text: "Club rank", size: 9, color: Club.faint)
                 }
             }
             .padding(.horizontal, 4)
 
-            if list.ranked.isEmpty {
+            if store.isBlocked(memberID) {
+                EmptyState(title: "Blocked",
+                           message: "You've blocked \(member?.firstName ?? "them"), so their list, notes and scores are hidden. Unblock them from the \u{2026} menu.")
+            } else if list.ranked.isEmpty {
                 EmptyState(title: "Not ranked yet",
                            message: memberID == store.meID ? "Put this Volume's dinners in order in My List."
                                                            : "Their list fills in once they rank this Volume.")
             }
-            ForEach(Array(list.ranked.enumerated()), id: \.element.id) { index, dinner in
+            ForEach(Array((store.isBlocked(memberID) ? [] : list.ranked).enumerated()), id: \.element.id) { index, dinner in
                 NavigationLink(value: dinner) {
                     HStack(spacing: 14) {
                         RankNumeral(rank: index + 1, size: 28)
@@ -421,7 +491,7 @@ struct MembersView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if !list.new.isEmpty {
+            if !list.new.isEmpty, !store.isBlocked(memberID) {
                 Text("\(list.new.count) new \(list.new.count == 1 ? "dinner" : "dinners") still to place.")
                     .font(Club.italic(14))
                     .foregroundStyle(Club.faint)

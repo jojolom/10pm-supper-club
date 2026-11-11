@@ -13,6 +13,17 @@ struct RootView: View {
     @Environment(ClubStore.self) private var store
 
     var body: some View {
+        // The demo bar sits above every screen (not over it: an inset would cover the tabs'
+        // toolbars).
+        VStack(spacing: 0) {
+            if store.isDemo { DemoBar() }
+            phaseView
+        }
+        .background(Club.black.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.35), value: store.phase)
+    }
+
+    private var phaseView: some View {
         ZStack {
             Club.black.ignoresSafeArea()
             switch store.phase {
@@ -26,7 +37,6 @@ struct RootView: View {
                 ClubTabs()
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: store.phase)
     }
 }
 
@@ -36,6 +46,7 @@ struct RootView: View {
 /// or just look around as a guest.
 struct WelcomeView: View {
     @Environment(ClubStore.self) private var store
+    @Environment(\.showDemo) private var showDemo
     @State private var isStarting = false
     @State private var error: String?
 
@@ -66,6 +77,13 @@ struct WelcomeView: View {
                         note("Browse the club's dinners. To score them, sign in to iCloud in Settings.")
                     }
                 }
+                Button { showDemo(true) } label: {
+                    Text("Explore the demo club")
+                        .font(Club.serif(16))
+                        .underline()
+                        .foregroundStyle(Club.cream.opacity(0.85))
+                }
+                .padding(.top, 4)
                 if let error = error ?? store.lastError {
                     Text(error)
                         .font(.footnote)
@@ -152,12 +170,27 @@ struct ProfileSetupView: View {
             }
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             .padding(.horizontal, 32)
-            .padding(.bottom, 24)
+            TermsNote(action: store.isMember ? "taking your seat" : "asking to join")
+                .padding(.horizontal, 32)
+                .padding(.bottom, 24)
         }
         .onAppear { focused = true }
     }
 
     private func save() { store.setMyName(name) }
+}
+
+/// "By asking to join, you agree to the Terms…": shown wherever someone adds to the club.
+struct TermsNote: View {
+    let action: String
+
+    var body: some View {
+        Text("By \(action), you agree to the [Terms](\(Support.termsURL.absoluteString)): nothing offensive, abusive or unlawful. Report anything that is, and it's reviewed within 24 hours.")
+            .font(Club.italic(13))
+            .foregroundStyle(Club.faint)
+            .tint(Club.muted)
+            .multilineTextAlignment(.center)
+    }
 }
 
 // MARK: - Tabs
@@ -274,5 +307,34 @@ private struct SaveErrorBar: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
+    }
+}
+
+/// Across the top of the demo club: it's a sample, and the way back.
+private struct DemoBar: View {
+    @Environment(\.showDemo) private var showDemo
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SpacedCaps(text: "Demo club", size: 9.5, color: Club.black)
+            Text("Sample dinners. Nothing is saved.")
+                .font(Club.italic(13))
+                .foregroundStyle(Club.black.opacity(0.75))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            Button { showDemo(false) } label: {
+                SpacedCaps(text: "Leave", size: 9.5, color: Club.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .overlay(Capsule().stroke(Club.black.opacity(0.5), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Club.cream, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
     }
 }

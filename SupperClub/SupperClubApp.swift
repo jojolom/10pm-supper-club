@@ -4,6 +4,8 @@
 //
 //  Entry point. Picks the backend (iCloud, or the demo club for debug builds launched with
 //  `-demo YES`, as a guest with `-guest YES`) and keeps the club fresh while the app is open.
+//  Anyone can also open the demo club from the welcome screen (`\.showDemo`), to try what
+//  members can do; nothing in it is saved.
 //
 
 import SwiftUI
@@ -27,6 +29,10 @@ struct SupperClubApp: App {
         WindowGroup {
             RootView()
                 .environment(store)
+                .environment(\.showDemo) { demo in
+                    store = ClubStore(backend: demo ? DemoBackend() : CloudKitBackend())
+                    Task { await store.start() }
+                }
                 .preferredColorScheme(.dark)
                 .tint(Club.cream)
                 .task { await store.start() }
@@ -42,4 +48,9 @@ struct SupperClubApp: App {
                 }
         }
     }
+}
+
+extension EnvironmentValues {
+    /// Switches to the demo club (true) or back to the real one (false).
+    @Entry var showDemo: (Bool) -> Void = { _ in }
 }

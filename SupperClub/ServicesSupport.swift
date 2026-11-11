@@ -12,6 +12,8 @@ import Foundation
 enum Support {
     static let email = "jojolom.lombardi@icloud.com"
     static let pageURL = URL(string: "https://jojolom.github.io/10pm-supper-club/")!
+    /// The terms everyone agrees to before adding anything: no objectionable content.
+    static let termsURL = URL(string: "https://jojolom.github.io/10pm-supper-club/#terms")!
 
     /// A drafted email reporting a dinner's page (its notes, photos or scores).
     static func reportURL(about dinner: Dinner) -> URL {

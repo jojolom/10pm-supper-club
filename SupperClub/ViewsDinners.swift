@@ -172,11 +172,12 @@ struct DinnerDetailView: View {
                     Menu {
                         if store.isMember {
                             Button { editingReview = true } label: { Label("My Scores & Notes", systemImage: "square.and.pencil") }
+                        }
+                        Link(destination: Support.reportURL(about: dinner)) {
+                            Label("Report a Problem", systemImage: "exclamationmark.bubble")
+                        }
+                        if store.isMember {
                             Button(role: .destructive) { confirmDelete = true } label: { Label("Delete Dinner", systemImage: "trash") }
-                        } else {
-                            Link(destination: Support.reportURL(about: dinner)) {
-                                Label("Report a Problem", systemImage: "exclamationmark.bubble")
-                            }
                         }
                     } label: { Image(systemName: "ellipsis") }
                 }
@@ -289,6 +290,16 @@ struct DinnerDetailView: View {
                 }
                 .padding(14)
                 .clubCard()
+                .contextMenu {
+                    if review.memberID != store.meID, let author = store.member(review.memberID) {
+                        Link(destination: Support.reportURL(about: dinner)) {
+                            Label("Report This Note", systemImage: "exclamationmark.bubble")
+                        }
+                        Button(role: .destructive) { store.block(author.id) } label: {
+                            Label("Block \(author.firstName)", systemImage: "hand.raised")
+                        }
+                    }
+                }
             }
         }
     }
@@ -456,7 +467,10 @@ private struct GuestScoreEditor: View {
                 } header: {
                     Text("Your scores")
                 } footer: {
-                    Text("Out of 10, in half points. Yours count toward the guest average, shown apart from the club's.")
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Out of 10, in half points. Yours count toward the guest average, shown apart from the club's.")
+                        Text("By saving, you agree to the [Terms](\(Support.termsURL.absoluteString)): nothing offensive, abusive or unlawful.")
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
